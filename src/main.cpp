@@ -7,6 +7,7 @@
 #include "app/D3DContext.h"
 #include "capture/CaptureSource.h"
 #include "capture/Region.h"
+#include "capture/RegionPicker.h"
 #include "compute/Waveform.h"
 #include "compute/TestPattern.h"
 #include "render/GraphView.h"
@@ -30,6 +31,7 @@ Waveform     g_wave;
 GraphView    g_graph;
 bool         g_resize = false;
 UINT         g_resizeW = 0, g_resizeH = 0;
+HWND         g_hwnd = nullptr;
 
 enum class SourceMode { Live, TestPattern };
 
@@ -129,6 +131,25 @@ static void DrawControls() {
     ImGui::RadioButton("Full output", &g_ui.regionMode, 0); ImGui::SameLine();
     ImGui::RadioButton("Window", &g_ui.regionMode, 1);      ImGui::SameLine();
     ImGui::RadioButton("Rect", &g_ui.regionMode, 2);
+
+    // ShareX-style: hide our window, freeze the screen, drag a rectangle.
+    if (ImGui::Button("Select region on screen (drag)")) {
+        RECT outRect = g_capture.DesktopRect();
+        if (outRect.right <= outRect.left) { // test-pattern / no live output: use primary
+            outRect = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
+        }
+        ShowWindow(g_hwnd, SW_HIDE);
+        Sleep(140); // let the desktop repaint the area we were covering
+        RECT picked;
+        bool got = regionpicker::PickScreenRegion(outRect, picked);
+        ShowWindow(g_hwnd, SW_SHOW);
+        SetForegroundWindow(g_hwnd);
+        if (got) {
+            g_ui.dragRect = picked;
+            g_ui.regionMode = 2;
+            if (g_ui.source != SourceMode::Live) g_ui.source = SourceMode::Live;
+        }
+    }
     if (g_ui.regionMode == 1) {
         if (ImGui::Button("Pick window under cursor (2s)"))
             g_ui.pickArmUntil = GetTickCount64() + 2000;
@@ -260,6 +281,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
     HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"HDRScopes - Waveform",
         WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1440, 900,
         nullptr, nullptr, hInst, nullptr);
+    g_hwnd = hwnd;
 
     if (!g_d3d.Init(hwnd)) { HDRLog("D3D init failed"); return 1; }
 

@@ -27,6 +27,7 @@ add_executable(HDRScopes WIN32
     src/app/D3DContext.cpp
     src/util/ShaderCompiler.cpp
     src/capture/CaptureSource.cpp
+    src/capture/RegionPicker.cpp
     src/compute/Waveform.cpp
     src/compute/TestPattern.cpp
     src/render/GraphView.cpp
@@ -34,7 +35,7 @@ add_executable(HDRScopes WIN32
 target_include_directories(HDRScopes PRIVATE src)
 target_link_libraries(HDRScopes PRIVATE
     imgui
-    d3d11 dxgi d3dcompiler dxguid
+    d3d11 dxgi d3dcompiler dxguid msimg32
 )
 target_compile_definitions(HDRScopes PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 
