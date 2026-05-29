@@ -1,0 +1,18 @@
+# Build output
+/build/
+/out/
+*.exe
+*.pdb
+*.ilk
+*.obj
+*.lib
+*.exp
+# VS / CMake
+.vs/
+CMakeCache.txt
+CMakeFiles/
+*.user
+# Reference repos (large, not part of build)
+/reference/repos/
+# ImGui runtime layout (we use a code-defined layout)
+imgui.ini
