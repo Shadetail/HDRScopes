@@ -40,6 +40,7 @@ void Settings::Save() const {
     W(o, "fpsLimit", fpsLimit);
     W(o, "uiFollowSdrWhite", uiFollowSdrWhite);
     W(o, "debugShowTestPattern", debugShowTestPattern);
+    W(o, "useTestPattern", useTestPattern);
     W(o, "outputIndex", outputIndex);
     W(o, "regionMode", regionMode);
     for (int i = 0; i < 4; ++i) { char k[32]; snprintf(k, 32, "dragRect%d", i); W(o, k, dragRect[i]); }
@@ -100,6 +101,7 @@ void Settings::Load() {
     fpsLimit = kv.geti("fpsLimit", fpsLimit);
     uiFollowSdrWhite = kv.getb("uiFollowSdrWhite", uiFollowSdrWhite);
     debugShowTestPattern = kv.getb("debugShowTestPattern", debugShowTestPattern);
+    useTestPattern = kv.getb("useTestPattern", useTestPattern);
     outputIndex = kv.geti("outputIndex", outputIndex);
     regionMode = kv.geti("regionMode", regionMode);
     for (int i = 0; i < 4; ++i) { char k[32]; snprintf(k, 32, "dragRect%d", i); dragRect[i] = kv.geti(k, dragRect[i]); }

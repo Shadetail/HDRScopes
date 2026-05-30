@@ -64,12 +64,12 @@ struct Settings {
     bool   histoChannelEnabled[3] = { true, true, true };
 
     // ---- Vectorscope ----
-    float  vectorGain = 0.10f;
+    float  vectorGain = 0.20f;
     bool   vectorShowSkin = true;
 
     // ---- CIE ----
     int    cieDiagram = 1;            // 0 = xy (1931), 1 = u'v' (1976)
-    float  cieGain = 0.10f;
+    float  cieGain = 0.20f;
     bool   cieShowRec2020 = true, cieShowP3 = true, cieShowRec709 = true;
 
     // ---- Per-panel view (zoom/pan) ----

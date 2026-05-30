@@ -48,8 +48,14 @@ float3 CIEColor(float2 uv)
 
 float4 PSMain(VSOut i) : SV_Target
 {
-    uint2 px = uint2(i.uv.x * gSize, i.uv.y * gSize);
-    uint count = gAccum.Load(int3(px, 0));
+    int2 px = int2(i.uv.x * gSize, i.uv.y * gSize);
+    // Dilate by 1px in grid space so sparse points stay visible.
+    uint count = 0;
+    [unroll] for (int dy = -1; dy <= 1; ++dy)
+    [unroll] for (int dx = -1; dx <= 1; ++dx) {
+        int2 q = clamp(px + int2(dx, dy), int2(0, 0), int2(gSize - 1, gSize - 1));
+        count = max(count, gAccum.Load(int3(q, 0)));
+    }
     float a = saturate(1.0 - exp(-(float)count * gGain));
     if (a <= 0.0) return float4(0, 0, 0, 1);
     float3 col;

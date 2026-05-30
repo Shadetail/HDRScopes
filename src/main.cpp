@@ -258,7 +258,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
 
         // ---- Hover probe (source pixel under cursor) ----
         ScopeFrame probe;
-        if (!usingTest && srcSRV) {
+        if (g_set.showHoverProbe && !usingTest && srcSRV) {
             POINT cur; GetCursorPos(&cur);
             if (PtInRect(&outRect, cur)) {
                 int tx = cur.x - outRect.left, ty = cur.y - outRect.top;

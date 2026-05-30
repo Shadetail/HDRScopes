@@ -59,9 +59,10 @@ void ScopePanel::Draw(int index, const ImVec2& panelP0, const ImVec2& panelP1,
     ImDrawList* dl = ImGui::GetWindowDrawList();
     scope_->DrawOverlay(dl, f, s);
 
-    // Input: zoom-to-mouse + middle-drag pan over the graph.
+    // Input: zoom-to-mouse + middle-drag pan over the graph. Require the host
+    // window to be the hovered one so the controls popup doesn't pass through.
     ImGuiIO& io = ImGui::GetIO();
-    bool hov = ImGui::IsMouseHoveringRect(g0, g1);
+    bool hov = ImGui::IsMouseHoveringRect(g0, g1) && ImGui::IsWindowHovered();
     if (hov && io.MouseWheel != 0.0f) {
         float z0 = std::max(1.0f, s.zoom[index]);
         float z1 = std::clamp(z0 * std::exp(io.MouseWheel * 0.15f), 1.0f, 64.0f);
