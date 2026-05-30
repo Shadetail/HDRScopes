@@ -26,16 +26,24 @@ add_executable(HDRScopes WIN32
     src/main.cpp
     src/app/D3DContext.cpp
     src/util/ShaderCompiler.cpp
+    src/util/Settings.cpp
+    src/util/SdrWhite.cpp
     src/capture/CaptureSource.cpp
     src/capture/RegionPicker.cpp
-    src/compute/Waveform.cpp
+    src/capture/PixelProbe.cpp
     src/compute/TestPattern.cpp
-    src/render/GraphView.cpp
+    src/scope/ScopePanel.cpp
+    src/scope/ScopeFactory.cpp
+    src/scope/WaveformScope.cpp
+    src/scope/HistogramScope.cpp
+    src/scope/ChromaScope.cpp
+    src/scope/VectorScope.cpp
+    src/scope/CIEScope.cpp
 )
 target_include_directories(HDRScopes PRIVATE src)
 target_link_libraries(HDRScopes PRIVATE
     imgui
-    d3d11 dxgi d3dcompiler dxguid msimg32
+    d3d11 dxgi d3dcompiler dxguid msimg32 winmm
 )
 target_compile_definitions(HDRScopes PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 

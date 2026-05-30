@@ -1,31 +1,26 @@
-// Waveform compute: clear -> histogram (with per-column min/max for Extents).
-// Resolve/normalize happens render-side in graph_ps.hlsl over the bins texture.
+// Waveform compute: clear -> histogram (counts at graphCols) + per-column
+// min/max extents (at a possibly higher extentCols, for supersampled extents).
+// Source is sampled on an arbitrary grid (sampleW x sampleH); bilinear filtering
+// averages neighbourhoods to suppress the noise patterns nearest sampling leaves.
 //
-// Vertical axis is PQ-spaced nits over a fixed 0..10,000 range. scRGB is linear
-// Rec.709 with 1.0 = 80 nits, so 10,000 nits == scRGB 125. Feeding the scRGB
-// value straight into LinearToPQ(value, 125) yields the 0..1 vertical position.
+// Vertical axis: scRGB -> 0..1 via LinearToPQ(value, 125); 125 scRGB = 10,000 nits.
 #include "colorspaces.hlsli"
 
-#define MAX_PQ_SCRGB 125.0  // scRGB value that maps to 10,000 nits (top of axis)
+#define MAX_PQ_SCRGB 125.0
 
 cbuffer WaveformCB : register(b0)
 {
-    uint gGraphCols;   // horizontal resolution of the graph (decoupled from display)
-    uint gBins;        // vertical resolution (PQ-axis subdivisions)
-    uint gChannels;    // 1 = luminance, 3 = RGB
-    uint gMode;        // 0 = luminance, 1 = RGB per-channel
-
-    int  gCropX, gCropY, gCropW, gCropH; // source region in capture-texel space
-    uint gSrcW, gSrcH;                   // capture texture dimensions
-    uint _pad0, _pad1;
+    uint gGraphCols, gBins, gChannels, gMode;          // mode 0=luma,1=rgb
+    uint gExtentCols, gSampleW, gSampleH, gUseBilinear;
+    int  gCropX, gCropY, gCropW, gCropH;
+    uint gSrcW, gSrcH, gPad0, gPad1;
 };
 
-Texture2D<float4> gSource   : register(t0);
+Texture2D<float4> gSource    : register(t0);
+SamplerState      gLinear    : register(s0);
 RWTexture2D<uint> gBinsRW    : register(u0); // (gGraphCols, gBins * gChannels)
-RWTexture2D<uint> gExtentsRW : register(u1); // (gGraphCols, 2 * gChannels): 2c=min,2c+1=max bin
+RWTexture2D<uint> gExtentsRW : register(u1); // (gExtentCols, 2 * gChannels)
 
-// scRGB luminance (linear, Rec.709 primaries — the Y row of Rec709->XYZ). This
-// is physics for Rec.709-primaried data, not an SDR luma choice.
 float ScrgbLuminance(float3 c)
 {
     return dot(c, float3(0.2126390039920806884765625,
@@ -33,7 +28,6 @@ float ScrgbLuminance(float3 c)
                          0.072192318737506866455078125));
 }
 
-// Map an scRGB value to a 0..(gBins-1) row, clamped (>=10,000 nits -> top row).
 int ValueToBin(float scrgbValue)
 {
     float pos01 = LinearToPQY(max(scrgbValue, 0.0), MAX_PQ_SCRGB);
@@ -42,46 +36,49 @@ int ValueToBin(float scrgbValue)
 }
 
 [numthreads(8, 8, 1)]
-void CSClear(uint3 id : SV_DispatchThreadID)
+void CSClearExtents(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= gGraphCols || id.y >= gBins * gChannels) return;
-    gBinsRW[id.xy] = 0;
-
-    // Initialise per-column extents once per channel row band.
-    if (id.y < gChannels) {
-        gExtentsRW[uint2(id.x, 2 * id.y + 0)] = gBins; // min starts high
-        gExtentsRW[uint2(id.x, 2 * id.y + 1)] = 0;      // max starts low
-    }
+    if (id.x >= gExtentCols || id.y >= gChannels) return;
+    gExtentsRW[uint2(id.x, 2 * id.y + 0)] = gBins; // min starts high
+    gExtentsRW[uint2(id.x, 2 * id.y + 1)] = 0;     // max starts low
 }
 
-void Accumulate(uint col, uint ch, float scrgbValue)
+void Accumulate(uint col, uint extCol, uint ch, float scrgbValue)
 {
     int bin = ValueToBin(scrgbValue);
-    uint row = ch * gBins + (uint)bin;
-    InterlockedAdd(gBinsRW[uint2(col, row)], 1u);
-    InterlockedMin(gExtentsRW[uint2(col, 2 * ch + 0)], (uint)bin);
-    InterlockedMax(gExtentsRW[uint2(col, 2 * ch + 1)], (uint)bin);
+    InterlockedAdd(gBinsRW[uint2(col, ch * gBins + (uint)bin)], 1u);
+    InterlockedMin(gExtentsRW[uint2(extCol, 2 * ch + 0)], (uint)bin);
+    InterlockedMax(gExtentsRW[uint2(extCol, 2 * ch + 1)], (uint)bin);
 }
 
 [numthreads(8, 8, 1)]
 void CSHistogram(uint3 id : SV_DispatchThreadID)
 {
-    if ((int)id.x >= gCropW || (int)id.y >= gCropH) return;
+    if (id.x >= gSampleW || id.y >= gSampleH) return;
 
-    int2 src = int2(gCropX + (int)id.x, gCropY + (int)id.y);
-    if (src.x < 0 || src.y < 0 || src.x >= (int)gSrcW || src.y >= (int)gSrcH) return;
+    float u = (id.x + 0.5) / gSampleW;
+    float v = (id.y + 0.5) / gSampleH;
 
-    float3 c = Clamp_scRGB(gSource.Load(int3(src, 0)).rgb);
+    float3 c;
+    if (gUseBilinear) {
+        float2 texUV = float2((gCropX + u * gCropW) / gSrcW,
+                              (gCropY + v * gCropH) / gSrcH);
+        c = gSource.SampleLevel(gLinear, texUV, 0).rgb;
+    } else {
+        int2 src = int2(gCropX + (int)(u * gCropW), gCropY + (int)(v * gCropH));
+        src = clamp(src, int2(0, 0), int2(gSrcW - 1, gSrcH - 1));
+        c = gSource.Load(int3(src, 0)).rgb;
+    }
+    c = Clamp_scRGB(c);
 
-    // Column the pixel falls into (graph X is decoupled from source width).
-    uint col = (uint)(((float)id.x / (float)max(gCropW, 1)) * gGraphCols);
-    col = min(col, gGraphCols - 1);
+    uint col    = min((uint)(u * gGraphCols),  gGraphCols - 1);
+    uint extCol = min((uint)(u * gExtentCols), gExtentCols - 1);
 
     if (gMode == 0) {
-        Accumulate(col, 0, ScrgbLuminance(c));
+        Accumulate(col, extCol, 0, ScrgbLuminance(c));
     } else {
-        Accumulate(col, 0, c.r);
-        Accumulate(col, 1, c.g);
-        Accumulate(col, 2, c.b);
+        Accumulate(col, extCol, 0, c.r);
+        Accumulate(col, extCol, 1, c.g);
+        Accumulate(col, extCol, 2, c.b);
     }
 }

@@ -71,7 +71,16 @@ struct ImGui_ImplDX11_Data
 struct VERTEX_CONSTANT_BUFFER_DX11
 {
     float   mvp[4][4];
+    float   brightness;   // [HDRScopes] scRGB brightness multiplier for UI chrome
+    float   pad[3];
 };
+
+// [HDRScopes] Global UI brightness applied to all ImGui vertex colors. On an
+// scRGB FP16 HDR swapchain, set this to (SDRwhiteNits / 80) so UI white matches
+// the Windows SDR content brightness. HDR content drawn via ImGui::Image should
+// pass tint = 1/brightness to cancel it out and keep its true nit values.
+static float g_HDRScopes_UIBrightness = 1.0f;
+void ImGui_ImplDX11_SetUIBrightness(float b) { g_HDRScopes_UIBrightness = b; }
 
 // Backend data stored in io.BackendRendererUserData to allow support for multiple Dear ImGui contexts
 // It is STRONGLY preferred that you use docking branch with multi-viewports (== single Dear ImGui context + multiple windows) instead of multiple Dear ImGui contexts.
@@ -195,6 +204,7 @@ void ImGui_ImplDX11_RenderDrawData(ImDrawData* draw_data)
             { (R+L)/(L-R),  (T+B)/(B-T),    0.5f,       1.0f },
         };
         memcpy(&constant_buffer->mvp, mvp, sizeof(mvp));
+        constant_buffer->brightness = g_HDRScopes_UIBrightness; // [HDRScopes]
         ctx->Unmap(bd->pVertexConstantBuffer, 0);
     }
 
@@ -390,6 +400,7 @@ bool    ImGui_ImplDX11_CreateDeviceObjects()
             "cbuffer vertexBuffer : register(b0) \
             {\
               float4x4 ProjectionMatrix; \
+              float Brightness; \
             };\
             struct VS_INPUT\
             {\
@@ -409,7 +420,7 @@ bool    ImGui_ImplDX11_CreateDeviceObjects()
             {\
               PS_INPUT output;\
               output.pos = mul( ProjectionMatrix, float4(input.pos.xy, 0.f, 1.f));\
-              output.col = input.col;\
+              output.col = float4(input.col.rgb * Brightness, input.col.a);\
               output.uv  = input.uv;\
               return output;\
             }";

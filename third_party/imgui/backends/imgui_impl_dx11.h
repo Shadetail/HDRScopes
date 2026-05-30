@@ -29,4 +29,8 @@ IMGUI_IMPL_API void     ImGui_ImplDX11_RenderDrawData(ImDrawData* draw_data);
 IMGUI_IMPL_API void     ImGui_ImplDX11_InvalidateDeviceObjects();
 IMGUI_IMPL_API bool     ImGui_ImplDX11_CreateDeviceObjects();
 
+// [HDRScopes] Multiply all UI vertex colors by this (scRGB HDR brightness).
+// Set to SDRwhiteNits/80 so UI white matches Windows SDR content brightness.
+IMGUI_IMPL_API void     ImGui_ImplDX11_SetUIBrightness(float brightness);
+
 #endif // #ifndef IMGUI_DISABLE
