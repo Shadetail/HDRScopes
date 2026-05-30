@@ -6,7 +6,8 @@ cbuffer GCB : register(b0)
 {
     uint  gSize, gMode, gColorize, _p0;
     float gGain, gMinX, gMaxX, gMinY;
-    float gMaxY, gScale, _p1, _p2;
+    float gMaxY, gScale, gUVScaleX, gUVScaleY;
+    float gUVOffX, gUVOffY, _p1, _p2;
 };
 Texture2D<uint> gAccum : register(t0);
 
@@ -48,7 +49,10 @@ float3 CIEColor(float2 uv)
 
 float4 PSMain(VSOut i) : SV_Target
 {
-    int2 px = int2(i.uv.x * gSize, i.uv.y * gSize);
+    // Apply the pan/zoom transform (sampled_uv = off + screen_uv * scale).
+    float2 uv = float2(gUVOffX, gUVOffY) + i.uv * float2(gUVScaleX, gUVScaleY);
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return float4(0, 0, 0, 1);
+    int2 px = int2(uv.x * gSize, uv.y * gSize);
     // Dilate by 1px in grid space so sparse points stay visible.
     uint count = 0;
     [unroll] for (int dy = -1; dy <= 1; ++dy)
@@ -59,7 +63,7 @@ float4 PSMain(VSOut i) : SV_Target
     float a = saturate(1.0 - exp(-(float)count * gGain));
     if (a <= 0.0) return float4(0, 0, 0, 1);
     float3 col;
-    if (gColorize) col = (gMode == 0) ? HueWheel(i.uv) : CIEColor(i.uv);
+    if (gColorize) col = (gMode == 0) ? HueWheel(uv) : CIEColor(uv);
     else           col = float3(0.85, 0.95, 0.85);
     return float4(col * a, 1.0);
 }

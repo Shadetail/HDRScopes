@@ -11,7 +11,10 @@ static ImVec2 IctcpToPlot(double r, double g, double b, float scale) {
 void VectorScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s) {
     const ImVec2 g0 = f.graphP0, g1 = f.graphP1;
     const float W = g1.x - g0.x, H = g1.y - g0.y;
-    auto P = [&](ImVec2 p) { return ImVec2(g0.x + p.x * W, g0.y + p.y * H); };
+    auto P = [&](ImVec2 p) {
+        return ImVec2(g0.x + (p.x - f.panX) * f.zoom * W, g0.y + (p.y - f.panY) * f.zoom * H);
+    };
+    dl->PushClipRect(g0, g1, true);
     const ImU32 col = ImGui::GetColorU32(ImVec4(s.graticuleColor.x, s.graticuleColor.y, s.graticuleColor.z, s.graticuleOpacity));
     const ImU32 colText = ImGui::GetColorU32(ImVec4(0.82f, 0.82f, 0.82f, std::max(0.5f, s.graticuleOpacity)));
 
@@ -54,6 +57,7 @@ void VectorScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s) 
         ImVec2 p = P(IctcpToPlot(f.probeRGB[0], f.probeRGB[1], f.probeRGB[2], kScale));
         dl->AddCircle(p, 5.0f, IM_COL32(255, 255, 255, 255), 0, 1.6f);
     }
+    dl->PopClipRect();
 }
 
 void VectorScope::DrawControls(Settings& s) {

@@ -25,7 +25,10 @@ void CIEScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s) {
     PlotRange r = Range(s);
     const ImVec2 g0 = f.graphP0, g1 = f.graphP1;
     const float W = g1.x - g0.x, H = g1.y - g0.y;
-    auto S = [&](ImVec2 p) { return ImVec2(g0.x + p.x * W, g0.y + p.y * H); };
+    auto S = [&](ImVec2 p) {
+        return ImVec2(g0.x + (p.x - f.panX) * f.zoom * W, g0.y + (p.y - f.panY) * f.zoom * H);
+    };
+    dl->PushClipRect(g0, g1, true);
     auto XY = [&](double x, double y) { return S(XyToPlot(x, y, r.mode, r.minX, r.maxX, r.minY, r.maxY)); };
     const ImU32 col = ImGui::GetColorU32(ImVec4(s.graticuleColor.x, s.graticuleColor.y, s.graticuleColor.z, s.graticuleOpacity * 0.8f));
     const ImU32 colText = ImGui::GetColorU32(ImVec4(0.82f, 0.82f, 0.82f, std::max(0.5f, s.graticuleOpacity)));
@@ -68,6 +71,7 @@ void CIEScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s) {
             dl->AddCircle(p, 5.0f, IM_COL32(255, 255, 255, 255), 0, 1.6f);
         }
     }
+    dl->PopClipRect();
 }
 
 void CIEScope::DrawControls(Settings& s) {

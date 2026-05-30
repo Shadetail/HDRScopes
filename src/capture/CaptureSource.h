@@ -33,6 +33,7 @@ public:
     UINT Width()  const { return width_; }
     UINT Height() const { return height_; }
     RECT DesktopRect() const { return desktopRect_; }
+    std::wstring DeviceName() const { return outDesc_.DeviceName; }
     int  OutputIndex() const { return curOutputIndex_; }
     bool IsHDR() const { return isHDR_; }
     DXGI_FORMAT Format() const { return format_; }

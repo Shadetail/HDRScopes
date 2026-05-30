@@ -6,7 +6,8 @@ namespace {
 struct CCB { UINT size, mode, sampleW, sampleH; UINT useBilinear, pa, pb, pc;
              INT cropX, cropY, cropW, cropH; UINT srcW, srcH, pd, pe;
              float minX, maxX, minY, maxY; float scale, pf, pg, ph; };
-struct GCB { UINT size, mode, colorize, p0; float gain, minX, maxX, minY; float maxY, scale, p1, p2; };
+struct GCB { UINT size, mode, colorize, p0; float gain, minX, maxX, minY;
+             float maxY, scale, uvScaleX, uvScaleY; float uvOffX, uvOffY, p1, p2; };
 inline UINT DivUp(UINT a, UINT b) { return (a + b - 1) / b; }
 void SampleDims(Quality q, int cw, int ch, UINT& sw, UINT& sh) {
     auto cap = [](int v, int m) { return (UINT)std::min(std::max(v, 1), m); };
@@ -85,7 +86,7 @@ bool ChromaScope::EnsureRT(UINT w, UINT h) {
     rtW_ = w; rtH_ = h; return true;
 }
 
-void ChromaScope::Render(UINT outW, UINT outH, const ScopeFrame&, const Settings& s) {
+void ChromaScope::Render(UINT outW, UINT outH, const ScopeFrame& f, const Settings& s) {
     if (!EnsureRT(outW, outH)) return;
     PlotRange r = Range(s);
     D3D11_MAPPED_SUBRESOURCE ms;
@@ -94,6 +95,8 @@ void ChromaScope::Render(UINT outW, UINT outH, const ScopeFrame&, const Settings
         *cb = {};
         cb->size = size_; cb->mode = (UINT)r.mode; cb->colorize = s.colorize ? 1u : 0u;
         cb->gain = Gain(s); cb->minX = r.minX; cb->maxX = r.maxX; cb->minY = r.minY; cb->maxY = r.maxY; cb->scale = r.scale;
+        cb->uvScaleX = 1.0f / f.zoom; cb->uvScaleY = 1.0f / f.zoom;
+        cb->uvOffX = f.panX; cb->uvOffY = f.panY;
         context_->Unmap(graphCB_.Get(), 0);
     }
     const float clear[4] = { 0, 0, 0, 1 };

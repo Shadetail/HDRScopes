@@ -46,7 +46,8 @@ ScopePanel    g_panels[4];
 HWND          g_hwnd = nullptr;
 bool          g_resize = false; UINT g_resizeW = 0, g_resizeH = 0;
 bool          g_showControls = false;
-float         g_sdrWhiteNits = 200.0f;
+float         g_sdrWhiteNits = 200.0f;    // captured monitor (scope math)
+float         g_uiSdrWhiteNits = 200.0f;  // window's monitor (UI brightness)
 ULONGLONG     g_lastSdrQuery = 0;
 HWND          g_pickedWindow = nullptr;
 ULONGLONG     g_pickArmUntil = 0;
@@ -231,12 +232,19 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         }
 
         // SDR white level (refresh ~1/s; near-realtime for the UI + SDR-white zoom).
+        // Scope math uses the *captured* monitor; UI brightness uses the monitor
+        // the app window is on (they can differ on a mixed-HDR multi-monitor setup).
         ULONGLONG now = GetTickCount64();
         if (now - g_lastSdrQuery > 1000) {
-            g_sdrWhiteNits = sdrwhite::QueryPrimaryNits(200.0f);
+            std::wstring capDev = g_capture.DeviceName();
+            g_sdrWhiteNits = capDev.empty() ? sdrwhite::QueryPrimaryNits(200.0f)
+                                            : sdrwhite::QueryNits(capDev.c_str(), 200.0f);
+            MONITORINFOEXW mi = {}; mi.cbSize = sizeof(mi);
+            if (GetMonitorInfoW(MonitorFromWindow(g_hwnd, MONITOR_DEFAULTTONEAREST), &mi))
+                g_uiSdrWhiteNits = sdrwhite::QueryNits(mi.szDevice, 200.0f);
             g_lastSdrQuery = now;
         }
-        float uiB = (g_d3d.IsHDR() && g_set.uiFollowSdrWhite) ? (g_sdrWhiteNits / 80.0f) : 1.0f;
+        float uiB = (g_d3d.IsHDR() && g_set.uiFollowSdrWhite) ? (g_uiSdrWhiteNits / 80.0f) : 1.0f;
         ImGui_ImplDX11_SetUIBrightness(uiB);
 
         // ---- Source ----
@@ -340,7 +348,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         g_d3d.Context()->OMSetRenderTargets(1, &rtv, nullptr);
         g_d3d.Context()->ClearRenderTargetView(rtv, clear);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-        g_d3d.Present(true);
+        // When the sleep-based limiter is active it owns pacing, so present
+        // unsynced; otherwise vsync.
+        g_d3d.Present(g_set.fpsLimit == 0);
 
         // FPS limiter.
         if (g_set.fpsLimit > 0) {
