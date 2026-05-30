@@ -36,7 +36,11 @@ void ScopePanel::Draw(int index, const ImVec2& panelP0, const ImVec2& panelP1,
     }
     if (gw < 8 || gh < 8) return;
 
-    UINT pw = (UINT)gw, ph = (UINT)gh;
+    // Supersample the offscreen RT then let ImGui's linear sampler downsample it
+    // when drawn at panel size — anti-aliases the trace / zoom scaling.
+    int ss = std::clamp(s.renderSupersample, 1, 4);
+    UINT pw = (UINT)std::min((int)(gw * ss), 4096);
+    UINT ph = (UINT)std::min((int)(gh * ss), 4096);
 
     ScopeFrame f;
     f.graphP0 = g0; f.graphP1 = g1;

@@ -15,7 +15,7 @@ struct GraphCB {
     UINT  graphCols, bins, channels, mode;
     float gain; UINT colorize, extentsPoints, chanMask;
     float uvScaleX, uvScaleY, uvOffX, uvOffY;
-    float yAxisTop01; UINT extentCols; float p0, p1;
+    float yAxisTop01; UINT extentCols; float lowPassCols, p1;
 };
 inline UINT DivUp(UINT a, UINT b) { return (a + b - 1) / b; }
 }
@@ -191,7 +191,8 @@ void WaveformScope::Render(UINT outW, UINT outH, const ScopeFrame& f, const Sett
         cb->uvScaleX = 1.0f / f.zoom; cb->uvScaleY = 1.0f / f.zoom;
         cb->uvOffX = f.panX; cb->uvOffY = f.panY;
         cb->yAxisTop01 = (float)YAxisTop01(f, s); cb->extentCols = extCols_;
-        cb->p0 = cb->p1 = 0;
+        cb->lowPassCols = s.lowPass ? (1.0f + s.lowPassAmount * 8.0f) : 0.0f;
+        cb->p1 = 0;
         context_->Unmap(graphCB_.Get(), 0);
     }
 
@@ -326,16 +327,17 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
         float px = left + (float)((f.probeU - f.panX) * f.zoom * graphW);
         if (px >= left - 2 && px <= right + 2) {
             dl->PushClipRect(f.graphP0, f.graphP1, true);
+            float cr = s.hoverCircleRadius;
             if (curMode_ == 0) {
                 double lum = 0.2126390 * f.probeRGB[0] + 0.7151686 * f.probeRGB[1] + 0.0721923 * f.probeRGB[2];
                 float y = NitsToScreenY(std::max(0.0, lum) * 80.0, f, s);
-                dl->AddCircle(ImVec2(px, y), 5.0f, IM_COL32(255, 255, 255, 255), 0, 1.6f);
+                dl->AddCircle(ImVec2(px, y), cr, IM_COL32(255, 255, 255, 255), 0, 1.6f);
             } else {
                 const ImU32 cc[3] = { IM_COL32(255, 80, 80, 255), IM_COL32(80, 255, 80, 255), IM_COL32(110, 150, 255, 255) };
                 for (int ch = 0; ch < 3; ++ch) {
                     if (!s.channelEnabled[ch]) continue;
                     float y = NitsToScreenY(std::max(0.0f, f.probeRGB[ch]) * 80.0, f, s);
-                    dl->AddCircle(ImVec2(px, y), 5.0f, cc[ch], 0, 1.6f);
+                    dl->AddCircle(ImVec2(px, y), cr, cc[ch], 0, 1.6f);
                 }
             }
             dl->PopClipRect();
@@ -374,11 +376,13 @@ void WaveformScope::DrawControls(Settings& s) {
     }
     ImGui::SliderFloat("Brightness", &s.gain, 0.001f, 0.5f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::Checkbox("Zoom Y to SDR white", &s.sdrWhiteZoom);
+    ImGui::Checkbox("Low pass filter", &s.lowPass);
+    if (s.lowPass) { ImGui::SameLine(); ImGui::SetNextItemWidth(120); ImGui::SliderFloat("##lpa", &s.lowPassAmount, 0.0f, 1.0f, "%.2f"); }
 
     // Reference lines: custom count, log drag (shift = 10x finer), thickness.
     ImGui::SeparatorText("Reference lines");
     ImGui::SetNextItemWidth(120);
-    ImGui::SliderFloat("Thickness", &s.refLineThickness, 0.5f, 6.0f, "%.1f px");
+    ImGui::SliderFloat("Thickness", &s.refLineThickness, 1.0f, 6.0f, "%.1f px");
     ImGuiIO& io = ImGui::GetIO();
     for (size_t i = 0; i < s.refLines.size(); ++i) {
         ImGui::PushID((int)i + 500);

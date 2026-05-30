@@ -13,6 +13,7 @@
 #include "capture/RegionPicker.h"
 #include "capture/PixelProbe.h"
 #include "compute/TestPattern.h"
+#include "compute/Blur.h"
 #include "scope/ScopePanel.h"
 #include "scope/ScopeFactory.h"
 
@@ -40,6 +41,7 @@ namespace {
 D3DContext    g_d3d;
 CaptureSource g_capture;
 TestPattern   g_test;
+Blur          g_blur;
 PixelProbe    g_probe;
 Settings      g_set;
 ScopePanel    g_panels[4];
@@ -72,10 +74,12 @@ static POINT DefaultCapturePoint() {
 }
 
 // ---- controls popup ----------------------------------------------------------
-static void DrawControlsWindow() {
+static void DrawControlsWindow(float btnX, float btnY) {
     if (!g_showControls) return;
-    ImGui::SetNextWindowSize(ImVec2(380, 720), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(60, 60), ImGuiCond_FirstUseEver);
+    const float w = 380.0f;
+    ImGui::SetNextWindowSize(ImVec2(w, 760), ImGuiCond_FirstUseEver);
+    // Appear just under the Controls button (right-aligned to it) each time it opens.
+    ImGui::SetNextWindowPos(ImVec2(btnX + 60.0f - w, btnY), ImGuiCond_Appearing);
     if (!ImGui::Begin("Controls", &g_showControls)) { ImGui::End(); return; }
 
     if (ImGui::CollapsingHeader("Capture", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -129,11 +133,21 @@ static void DrawControlsWindow() {
         int qi = (int)g_set.quality; ImGui::SetNextItemWidth(160);
         if (ImGui::Combo("Quality", &qi, q, 5)) g_set.quality = (Quality)qi;
         ImGui::Checkbox("Bilinear source downsample", &g_set.bilinearDownsample);
+        const char* ss[] = { "Off", "2x", "4x" };
+        int ssi = g_set.renderSupersample <= 1 ? 0 : (g_set.renderSupersample >= 4 ? 2 : 1);
+        ImGui::SetNextItemWidth(160);
+        if (ImGui::Combo("Anti-alias (supersample)", &ssi, ss, 3)) g_set.renderSupersample = ssi == 0 ? 1 : (ssi == 1 ? 2 : 4);
+        ImGui::SetNextItemWidth(160);
+        ImGui::SliderFloat("Source blur", &g_set.sourceBlur, 0.0f, 8.0f, "%.1f px");
         ImGui::Checkbox("Show FPS", &g_set.showFps);
         ImGui::SetNextItemWidth(160);
-        ImGui::SliderInt("FPS limit (0=off)", &g_set.fpsLimit, 0, 240);
+        ImGui::SliderInt("FPS limit (0=vsync)", &g_set.fpsLimit, 0, 240);
         ImGui::Checkbox("UI follows Windows SDR white", &g_set.uiFollowSdrWhite);
-        ImGui::Checkbox("Hover probe", &g_set.showHoverProbe);
+        ImGui::Checkbox("Hover probe markers", &g_set.showHoverProbe);
+        ImGui::SameLine(); ImGui::SetNextItemWidth(70);
+        ImGui::SliderFloat("Size", &g_set.hoverCircleRadius, 3.0f, 24.0f, "%.0f");
+        ImGui::Checkbox("Hover readout (top)", &g_set.showHoverReadout);
+        ImGui::SameLine(); ImGui::Checkbox("8-bit SDR", &g_set.showSdr8bit);
     }
 
     if (ImGui::CollapsingHeader("Graticule", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -144,7 +158,7 @@ static void DrawControlsWindow() {
     int count = (int)g_set.layout;
     for (int i = 0; i < count; ++i) {
         ImGui::PushID(1000 + i);
-        char hdr[64]; snprintf(hdr, sizeof(hdr), "Panel %d — %s", i + 1, ScopeTypeName(g_set.panelScope[i]));
+        char hdr[64]; snprintf(hdr, sizeof(hdr), "Panel %d - %s", i + 1, ScopeTypeName(g_set.panelScope[i]));
         if (ImGui::CollapsingHeader(hdr, ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::SetNextItemWidth(180);
             ScopeCombo("Scope", g_set.panelScope[i]);
@@ -159,6 +173,40 @@ static void DrawControlsWindow() {
         else g_set.useTestPattern = false;
     }
     ImGui::End();
+}
+
+// sRGB-encode an SDR-normalized linear value to an 8-bit string ("255+" if HDR).
+static void Sdr8(float scrgb, float sdrNorm, char* out, size_t n) {
+    float v = scrgb / (sdrNorm > 1e-4f ? sdrNorm : 1.0f);
+    if (v > 1.0f) { snprintf(out, n, "255+"); return; }
+    if (v < 0.0f) v = 0.0f;
+    float e = (v <= 0.0031308f) ? 12.92f * v : 1.055f * powf(v, 1.0f / 2.4f) - 0.055f;
+    snprintf(out, n, "%d", (int)(e * 255.0f + 0.5f));
+}
+
+// L/R/G/B nit readout (+ optional 8-bit SDR) for the hovered pixel, top-center.
+static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float sdrNits, ImVec2 a0, ImVec2 a1) {
+    if (!s.showHoverReadout || !probe.probeValid) return;
+    double lum = 0.2126390 * probe.probeRGB[0] + 0.7151686 * probe.probeRGB[1] + 0.0721923 * probe.probeRGB[2];
+    char line1[160];
+    snprintf(line1, sizeof(line1), "L %.0f    R %.0f   G %.0f   B %.0f   nits",
+             std::max(0.0, lum) * 80.0, std::max(0.0f, probe.probeRGB[0]) * 80.0,
+             std::max(0.0f, probe.probeRGB[1]) * 80.0, std::max(0.0f, probe.probeRGB[2]) * 80.0);
+    char line2[160] = "";
+    if (s.showSdr8bit) {
+        float sn = sdrNits / 80.0f;
+        char r[8], g[8], b[8];
+        Sdr8(probe.probeRGB[0], sn, r, sizeof(r)); Sdr8(probe.probeRGB[1], sn, g, sizeof(g)); Sdr8(probe.probeRGB[2], sn, b, sizeof(b));
+        snprintf(line2, sizeof(line2), "SDR  %s, %s, %s", r, g, b);
+    }
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float cx = (a0.x + a1.x) * 0.5f;
+    ImVec2 t1 = ImGui::CalcTextSize(line1);
+    dl->AddText(ImVec2(cx - t1.x * 0.5f, a0.y + 6), IM_COL32(235, 235, 235, 240), line1);
+    if (line2[0]) {
+        ImVec2 t2 = ImGui::CalcTextSize(line2);
+        dl->AddText(ImVec2(cx - t2.x * 0.5f, a0.y + 6 + t1.y + 2), IM_COL32(180, 200, 235, 230), line2);
+    }
 }
 
 // Layout rects within the given content area.
@@ -204,6 +252,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
     ImGui_ImplWin32_Init(hwnd); ImGui_ImplDX11_Init(g_d3d.Device(), g_d3d.Context());
 
     g_test.Init(g_d3d.Device());
+    g_blur.Init(g_d3d.Device());
     g_probe.Init(g_d3d.Device());
     g_capture.Init(g_d3d.Device(), g_set.outputIndex >= 0 ? POINT{ 0,0 } : DefaultCapturePoint());
     if (g_set.outputIndex >= 0) g_capture.RetargetToIndex(g_set.outputIndex);
@@ -268,8 +317,15 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         if (!(usingTest || g_set.regionMode == 0))
             if (!region.ResolveToTexel(outRect, srcW, srcH, cx, cy, cw, ch)) { cx = cy = 0; cw = srcW; ch = srcH; }
 
-        ScopeInput input; input.srcSRV = srcSRV; input.srcW = srcW; input.srcH = srcH;
+        // Optional source blur (scopes read the blurred texture; the probe below
+        // still reads the original pixels for an accurate readout).
+        ID3D11ShaderResourceView* scopeSRV = srcSRV;
+        if (srcSRV && g_set.sourceBlur > 0.05f)
+            scopeSRV = g_blur.Apply(srcSRV, srcW, srcH, g_set.sourceBlur);
+
+        ScopeInput input; input.srcSRV = scopeSRV; input.srcW = srcW; input.srcH = srcH;
         input.cropX = cx; input.cropY = cy; input.cropW = cw; input.cropH = ch;
+        input.sdrWhiteNits = g_sdrWhiteNits;
 
         // ---- Hover probe (source pixel under cursor) ----
         ScopeFrame probe;
@@ -312,25 +368,36 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         for (int i = 0; i < count; ++i)
             dl->AddRect(r0[i], r1[i], IM_COL32(60, 60, 60, 255));
 
-        // Top-right: layout presets + gear.
-        ImGui::SetCursorScreenPos(ImVec2(area1.x - 168, area0.y + 6));
+        // Top-center hover readout.
+        DrawHoverReadout(probe, g_set, g_sdrWhiteNits, area0, area1);
+
+        // Top-right strip: (single layout) [scope combo] [Zoom] [1][2][4][Controls].
+        const float comboW = 150.0f;
+        float stripY = area0.y + 6;
+        float stripX = area1.x - 320 - (count == 1 ? comboW + 8 : 0);
+        ImGui::SetCursorScreenPos(ImVec2(stripX, stripY));
+        if (count == 1) {
+            ImGui::PushID(3000); ImGui::SetNextItemWidth(comboW);
+            ScopeCombo("##sc0", g_set.panelScope[0]); ImGui::PopID(); ImGui::SameLine();
+        }
+        char zlbl[32]; snprintf(zlbl, sizeof(zlbl), "Zoom %.2fx", g_set.zoom[0]);
+        if (ImGui::Button(zlbl)) { for (int i = 0; i < 4; ++i) { g_set.zoom[i] = 1; g_set.panX[i] = g_set.panY[i] = 0; } }
+        ImGui::SameLine();
         if (ImGui::Button("1")) g_set.layout = LayoutMode::Single; ImGui::SameLine();
         if (ImGui::Button("2")) g_set.layout = LayoutMode::SideBySide; ImGui::SameLine();
         if (ImGui::Button("4")) g_set.layout = LayoutMode::Quad; ImGui::SameLine();
+        float ctrlBtnX = ImGui::GetCursorScreenPos().x;
         if (ImGui::Button("Controls")) g_showControls = !g_showControls;
 
-        // Per-panel scope-type quick combo (top-left of each panel).
-        for (int i = 0; i < count; ++i) {
-            ImGui::SetCursorScreenPos(ImVec2(r0[i].x + 6, r0[i].y + 6));
+        // In multi-layout, each panel gets its own scope combo at its top-left.
+        if (count > 1) for (int i = 0; i < count; ++i) {
+            ImGui::SetCursorScreenPos(ImVec2(r0[i].x + 8, r0[i].y + 6));
             ImGui::PushID(2000 + i); ImGui::SetNextItemWidth(140);
             ScopeCombo("##sc", g_set.panelScope[i]);
             ImGui::PopID();
         }
 
-        // Bottom-left zoom (click to reset), bottom-right FPS.
-        ImGui::SetCursorScreenPos(ImVec2(area0.x + 8, area1.y - 26));
-        char zlbl[32]; snprintf(zlbl, sizeof(zlbl), "Zoom %.2fx", g_set.zoom[0]);
-        if (ImGui::Button(zlbl)) { for (int i = 0; i < 4; ++i) { g_set.zoom[i] = 1; g_set.panX[i] = g_set.panY[i] = 0; } }
+        // Bottom-right FPS.
         if (g_set.showFps) {
             char fps[32]; snprintf(fps, sizeof(fps), "%.0f FPS", ImGui::GetIO().Framerate);
             ImVec2 ts = ImGui::CalcTextSize(fps);
@@ -340,7 +407,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         ImGui::End();
         ImGui::PopStyleVar();
 
-        DrawControlsWindow();
+        // Controls popup appears just under the Controls button.
+        DrawControlsWindow(ctrlBtnX, area0.y + 34);
 
         ImGui::Render();
         ID3D11RenderTargetView* rtv = g_d3d.BackBufferRTV();

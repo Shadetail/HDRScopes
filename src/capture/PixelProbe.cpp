@@ -72,14 +72,15 @@ bool PixelProbe::Read(ID3D11ShaderResourceView* srv, UINT srcW, UINT srcH,
     pending_[writeIdx] = true;
     writeIdx_ = readIdx;
 
-    // Map the OTHER buffer (a frame older) without waiting.
+    // Map the OTHER buffer — it was copied a frame ago, so the GPU is already
+    // done with it and this blocking Map won't stall the pipeline.
     if (!pending_[readIdx]) {
         if (haveLast_) { outRGB[0] = lastRGB_[0]; outRGB[1] = lastRGB_[1]; outRGB[2] = lastRGB_[2]; return true; }
         return false;
     }
     D3D11_MAPPED_SUBRESOURCE ms;
-    HRESULT hr = context_->Map(staging_[readIdx].Get(), 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &ms);
-    if (hr == DXGI_ERROR_WAS_STILL_DRAWING || FAILED(hr)) {
+    HRESULT hr = context_->Map(staging_[readIdx].Get(), 0, D3D11_MAP_READ, 0, &ms);
+    if (FAILED(hr)) {
         if (haveLast_) { outRGB[0] = lastRGB_[0]; outRGB[1] = lastRGB_[1]; outRGB[2] = lastRGB_[2]; return true; }
         return false;
     }

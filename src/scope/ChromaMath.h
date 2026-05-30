@@ -35,6 +35,13 @@ inline std::array<double,3> Rec709toICtCp(double r, double g, double b) {
     return Mul3(LMStoICtCp, pql);
 }
 
+// Rec.709 Y'CbCr from gamma-encoded R'G'B' (0..1). Returns (Cb, Cr) in ±0.5.
+inline void Rec709YCbCr(double r, double g, double b, double& cb, double& cr) {
+    double y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    cb = (b - y) / 1.8556;
+    cr = (r - y) / 1.5748;
+}
+
 // xy chromaticity -> u'v'.
 inline void xyToUv(double x, double y, double& up, double& vp) {
     double d = -2.0 * x + 12.0 * y + 3.0;

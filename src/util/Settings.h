@@ -40,10 +40,15 @@ struct Settings {
     // ---- Shared scope look ----
     Quality quality = Quality::High;
     bool   bilinearDownsample = true;
+    int    renderSupersample = 2;     // render scope RT at Nx then bilinear-downsample (1/2/4)
+    float  sourceBlur = 0.0f;         // gaussian blur radius (source px) before scoping
     Vec3f  graticuleColor = { 0.55f, 0.55f, 0.55f };
     float  graticuleOpacity = 0.55f;
     bool   colorize = true;
     bool   showHoverProbe = true;
+    float  hoverCircleRadius = 9.0f;  // probe marker size (px)
+    bool   showHoverReadout = true;   // L/R/G/B nits at top-center
+    bool   showSdr8bit = true;        // also show 8-bit SDR values
 
     // ---- Waveform ----
     int    waveMode = 1;              // 0 = Luminance, 1 = RGB
@@ -53,6 +58,8 @@ struct Settings {
     bool   extentsSupersample = true;
     float  gain = 0.05f;
     bool   sdrWhiteZoom = false;      // zoom vertical axis to SDR-white range
+    bool   lowPass = false;           // low-pass filter the trace (smooth columns)
+    float  lowPassAmount = 0.5f;
 
     // ---- Reference lines (shared by waveform) ----
     std::vector<RefLine> refLines = { {100.0, false}, {1000.0, false} };
@@ -60,17 +67,20 @@ struct Settings {
 
     // ---- Histogram ----
     int    histoMode = 0;             // 0 = LRGB rows, 1 = overlaid, 2 = luma
-    float  histoGain = 0.05f;
+    float  histoGain = 0.0001f;
     bool   histoChannelEnabled[3] = { true, true, true };
 
     // ---- Vectorscope ----
     float  vectorGain = 0.20f;
     bool   vectorShowSkin = true;
+    float  vectorScale = 0.45f;       // Cb/Cr -> plot radius
+    float  vectorSkinAngleDeg = 123.0f; // flesh/I-line angle (math convention, Y up)
 
     // ---- CIE ----
-    int    cieDiagram = 1;            // 0 = xy (1931), 1 = u'v' (1976)
+    int    cieDiagram = 0;            // 0 = xy (1931), 1 = u'v' (1976)
     float  cieGain = 0.20f;
     bool   cieShowRec2020 = true, cieShowP3 = true, cieShowRec709 = true;
+    int    chromaDotRadius = 2;       // plotted-point dilation radius (grid px), shared by vector/CIE
 
     // ---- Per-panel view (zoom/pan) ----
     float  zoom[4] = { 1, 1, 1, 1 };

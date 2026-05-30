@@ -48,10 +48,15 @@ void Settings::Save() const {
     for (int i = 0; i < 4; ++i) { char k[32]; snprintf(k, 32, "panelScope%d", i); W(o, k, (int)panelScope[i]); }
     W(o, "quality", (int)quality);
     W(o, "bilinearDownsample", bilinearDownsample);
+    W(o, "renderSupersample", renderSupersample);
+    W(o, "sourceBlur", sourceBlur);
     W(o, "gratR", graticuleColor.x); W(o, "gratG", graticuleColor.y); W(o, "gratB", graticuleColor.z);
     W(o, "graticuleOpacity", graticuleOpacity);
     W(o, "colorize", colorize);
     W(o, "showHoverProbe", showHoverProbe);
+    W(o, "hoverCircleRadius", hoverCircleRadius);
+    W(o, "showHoverReadout", showHoverReadout);
+    W(o, "showSdr8bit", showSdr8bit);
     W(o, "waveMode", waveMode);
     for (int i = 0; i < 3; ++i) { char k[32]; snprintf(k, 32, "chan%d", i); W(o, k, channelEnabled[i]); }
     W(o, "extents", extents);
@@ -59,6 +64,8 @@ void Settings::Save() const {
     W(o, "extentsSupersample", extentsSupersample);
     W(o, "gain", gain);
     W(o, "sdrWhiteZoom", sdrWhiteZoom);
+    W(o, "lowPass", lowPass);
+    W(o, "lowPassAmount", lowPassAmount);
     W(o, "refCount", (int)refLines.size());
     for (size_t i = 0; i < refLines.size(); ++i) {
         char k[32];
@@ -71,11 +78,14 @@ void Settings::Save() const {
     for (int i = 0; i < 3; ++i) { char k[32]; snprintf(k, 32, "histoChan%d", i); W(o, k, histoChannelEnabled[i]); }
     W(o, "vectorGain", vectorGain);
     W(o, "vectorShowSkin", vectorShowSkin);
+    W(o, "vectorScale", vectorScale);
+    W(o, "vectorSkinAngleDeg", vectorSkinAngleDeg);
     W(o, "cieDiagram", cieDiagram);
     W(o, "cieGain", cieGain);
     W(o, "cieShowRec2020", cieShowRec2020);
     W(o, "cieShowP3", cieShowP3);
     W(o, "cieShowRec709", cieShowRec709);
+    W(o, "chromaDotRadius", chromaDotRadius);
     for (int i = 0; i < 4; ++i) {
         char k[32];
         snprintf(k, 32, "zoom%d", i); W(o, k, zoom[i]);
@@ -109,12 +119,17 @@ void Settings::Load() {
     for (int i = 0; i < 4; ++i) { char k[32]; snprintf(k, 32, "panelScope%d", i); panelScope[i] = (ScopeType)kv.geti(k, (int)panelScope[i]); }
     quality = (Quality)kv.geti("quality", (int)quality);
     bilinearDownsample = kv.getb("bilinearDownsample", bilinearDownsample);
+    renderSupersample = kv.geti("renderSupersample", renderSupersample);
+    sourceBlur = kv.getf("sourceBlur", sourceBlur);
     graticuleColor.x = kv.getf("gratR", graticuleColor.x);
     graticuleColor.y = kv.getf("gratG", graticuleColor.y);
     graticuleColor.z = kv.getf("gratB", graticuleColor.z);
     graticuleOpacity = kv.getf("graticuleOpacity", graticuleOpacity);
     colorize = kv.getb("colorize", colorize);
     showHoverProbe = kv.getb("showHoverProbe", showHoverProbe);
+    hoverCircleRadius = kv.getf("hoverCircleRadius", hoverCircleRadius);
+    showHoverReadout = kv.getb("showHoverReadout", showHoverReadout);
+    showSdr8bit = kv.getb("showSdr8bit", showSdr8bit);
     waveMode = kv.geti("waveMode", waveMode);
     for (int i = 0; i < 3; ++i) { char k[32]; snprintf(k, 32, "chan%d", i); channelEnabled[i] = kv.getb(k, channelEnabled[i]); }
     extents = kv.getb("extents", extents);
@@ -122,6 +137,8 @@ void Settings::Load() {
     extentsSupersample = kv.getb("extentsSupersample", extentsSupersample);
     gain = kv.getf("gain", gain);
     sdrWhiteZoom = kv.getb("sdrWhiteZoom", sdrWhiteZoom);
+    lowPass = kv.getb("lowPass", lowPass);
+    lowPassAmount = kv.getf("lowPassAmount", lowPassAmount);
     int rc = kv.geti("refCount", -1);
     if (rc >= 0) {
         refLines.clear();
@@ -138,11 +155,14 @@ void Settings::Load() {
     for (int i = 0; i < 3; ++i) { char k[32]; snprintf(k, 32, "histoChan%d", i); histoChannelEnabled[i] = kv.getb(k, histoChannelEnabled[i]); }
     vectorGain = kv.getf("vectorGain", vectorGain);
     vectorShowSkin = kv.getb("vectorShowSkin", vectorShowSkin);
+    vectorScale = kv.getf("vectorScale", vectorScale);
+    vectorSkinAngleDeg = kv.getf("vectorSkinAngleDeg", vectorSkinAngleDeg);
     cieDiagram = kv.geti("cieDiagram", cieDiagram);
     cieGain = kv.getf("cieGain", cieGain);
     cieShowRec2020 = kv.getb("cieShowRec2020", cieShowRec2020);
     cieShowP3 = kv.getb("cieShowP3", cieShowP3);
     cieShowRec709 = kv.getb("cieShowRec709", cieShowRec709);
+    chromaDotRadius = kv.geti("chromaDotRadius", chromaDotRadius);
     for (int i = 0; i < 4; ++i) {
         char k[32];
         snprintf(k, 32, "zoom%d", i); zoom[i] = kv.getf(k, zoom[i]);

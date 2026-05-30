@@ -7,7 +7,7 @@ cbuffer GCB : register(b0)
     uint  gSize, gMode, gColorize, _p0;
     float gGain, gMinX, gMaxX, gMinY;
     float gMaxY, gScale, gUVScaleX, gUVScaleY;
-    float gUVOffX, gUVOffY, _p1, _p2;
+    float gUVOffX, gUVOffY, gDotRadius, _p2;
 };
 Texture2D<uint> gAccum : register(t0);
 
@@ -17,14 +17,19 @@ VSOut VSMain(uint vid : SV_VertexID) {
     o.uv = uv; o.pos = float4(uv.x * 2 - 1, 1 - uv.y * 2, 0, 1); return o;
 }
 
-float3 HueWheel(float2 uv)
+// Reconstruct the true vectorscope colour at a plot position from its Cb/Cr,
+// so a point lands on its target AND shows that target's colour (like DaVinci).
+float3 VectorColor(float2 uv)
 {
-    float2 d = uv - 0.5;
-    float ang = atan2(-d.y, d.x);                 // screen y down
-    float h = (ang / 6.2831853 + 1.0);
-    h = frac(h);
-    float3 k = frac(h + float3(0.0, 2.0 / 3.0, 1.0 / 3.0));
-    return saturate(abs(k * 6.0 - 3.0) - 1.0);
+    float Cb = (uv.x - 0.5) / max(gScale, 1e-4);
+    float Cr = (0.5 - uv.y) / max(gScale, 1e-4);
+    float Y = 0.5;
+    float r = Y + 1.5748 * Cr;
+    float b = Y + 1.8556 * Cb;
+    float g = (Y - 0.2126 * r - 0.0722 * b) / 0.7152;
+    float3 rgb = max(float3(r, g, b), 0.0);
+    rgb /= max(max(rgb.r, max(rgb.g, rgb.b)), 1e-3);
+    return saturate(rgb);
 }
 
 float3 CIEColor(float2 uv)
@@ -53,17 +58,18 @@ float4 PSMain(VSOut i) : SV_Target
     float2 uv = float2(gUVOffX, gUVOffY) + i.uv * float2(gUVScaleX, gUVScaleY);
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return float4(0, 0, 0, 1);
     int2 px = int2(uv.x * gSize, uv.y * gSize);
-    // Dilate by 1px in grid space so sparse points stay visible.
+    // Dilate by gDotRadius px in grid space so points are visible (size adjustable).
+    int R = (int)(gDotRadius + 0.5);
     uint count = 0;
-    [unroll] for (int dy = -1; dy <= 1; ++dy)
-    [unroll] for (int dx = -1; dx <= 1; ++dx) {
+    for (int dy = -R; dy <= R; ++dy)
+    for (int dx = -R; dx <= R; ++dx) {
         int2 q = clamp(px + int2(dx, dy), int2(0, 0), int2(gSize - 1, gSize - 1));
         count = max(count, gAccum.Load(int3(q, 0)));
     }
     float a = saturate(1.0 - exp(-(float)count * gGain));
     if (a <= 0.0) return float4(0, 0, 0, 1);
     float3 col;
-    if (gColorize) col = (gMode == 0) ? HueWheel(uv) : CIEColor(uv);
+    if (gColorize) col = (gMode == 0) ? VectorColor(uv) : CIEColor(uv);
     else           col = float3(0.85, 0.95, 0.85);
     return float4(col * a, 1.0);
 }

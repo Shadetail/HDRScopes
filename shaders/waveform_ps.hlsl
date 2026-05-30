@@ -8,7 +8,7 @@ cbuffer GraphCB : register(b0)
     uint  gGraphCols, gBins, gChannels, gMode;   // mode 0=luma,1=rgb
     float gGain; uint gColorize; uint gExtentsPoints; uint gChanMask;
     float gUVScaleX, gUVScaleY, gUVOffX, gUVOffY;
-    float gYAxisTop01; uint gExtentCols; float _p0, _p1;
+    float gYAxisTop01; uint gExtentCols; float gLowPassCols, _p1;
 };
 
 Texture2D<uint> gBinsTex    : register(t0); // (gGraphCols, gBins * gChannels)
@@ -55,9 +55,21 @@ float4 PSMain(VSOut i) : SV_Target
 
     float3 rgb = float3(0, 0, 0);
     uint chN = (gMode == 0) ? 1u : 3u;
+    int lpR = (int)gLowPassCols;
     for (uint ch = 0; ch < chN; ++ch) {
         if (gMode == 1 && !(gChanMask & (1u << ch))) continue;
-        uint count = gBinsTex.Load(int3(col, ch * gBins + bin, 0));
+        uint count;
+        if (lpR >= 1) {
+            // Low-pass filter: average the trace across neighbouring columns.
+            float acc = 0;
+            for (int dc = -lpR; dc <= lpR; ++dc) {
+                int cc = clamp((int)col + dc, 0, (int)gGraphCols - 1);
+                acc += gBinsTex.Load(int3(cc, ch * gBins + bin, 0));
+            }
+            count = (uint)(acc / (2 * lpR + 1));
+        } else {
+            count = gBinsTex.Load(int3(col, ch * gBins + bin, 0));
+        }
         rgb += ChannelColor(ch) * Intensity(count);
 
         if (gExtentsPoints) {

@@ -32,6 +32,7 @@ add_executable(HDRScopes WIN32
     src/capture/RegionPicker.cpp
     src/capture/PixelProbe.cpp
     src/compute/TestPattern.cpp
+    src/compute/Blur.cpp
     src/scope/ScopePanel.cpp
     src/scope/ScopeFactory.cpp
     src/scope/WaveformScope.cpp

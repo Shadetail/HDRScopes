@@ -174,7 +174,14 @@ void HistogramScope::DrawControls(Settings& s) {
         }
     }
     ImGui::Checkbox("Colorize", &s.colorize);
-    ImGui::SliderFloat("Brightness", &s.histoGain, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic);
+    // Friendly 0..100 brightness, log-mapped to gain (wide range, low default).
+    const float gmin = 2e-6f, gmax = 1e-3f;
+    float lg = std::log10(gmin), hg = std::log10(gmax);
+    float t = (std::log10(std::clamp(s.histoGain, gmin, gmax)) - lg) / (hg - lg);
+    int bri = (int)(t * 100.0f + 0.5f);
+    ImGui::SetNextItemWidth(180);
+    if (ImGui::SliderInt("Brightness", &bri, 0, 100))
+        s.histoGain = std::pow(10.0f, lg + (bri / 100.0f) * (hg - lg));
 }
 
 void HistogramScope::Shutdown() {

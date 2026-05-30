@@ -12,8 +12,15 @@ cbuffer CCB : register(b0)
     int   gCropX, gCropY, gCropW, gCropH;
     uint  gSrcW, gSrcH, _pd, _pe;
     float gMinX, gMaxX, gMinY, gMaxY; // plot range (CIE) / unused for vector
-    float gScale, _pf, _pg, _ph;      // vector chroma scale
+    float gScale, gSdrNorm, _pg, _ph; // vector chroma scale; SDR-white scRGB (=nits/80)
 };
+
+// Rec.709 OETF, sign/range preserving (handles negatives and > 1.0).
+float3 Rec709OETF(float3 x) {
+    float3 a = abs(x);
+    float3 v = (a < 0.018) ? (4.5 * a) : (1.0993 * pow(a, 0.45) - 0.0993);
+    return sign(x) * v;
+}
 
 Texture2D<float4> gSource : register(t0);
 SamplerState      gLinear : register(s0);
@@ -23,11 +30,18 @@ bool MapPoint(float3 c, out float2 p)
 {
     p = float2(0, 0);
     if (gMode == 0) {
-        float3 ictcp = Rec709toICtCp(max(c, 0.0));
-        p = float2(0.5 + ictcp.y * gScale, 0.5 - ictcp.z * gScale);
+        // Standard Rec.709 Y'CbCr vectorscope (matches DaVinci). Normalize to the
+        // SDR-white signal range, gamma-encode, then take Cb (X) / Cr (Y, up).
+        float3 sig = Rec709OETF(c / max(gSdrNorm, 1e-4));
+        float Y  = dot(sig, float3(0.2126, 0.7152, 0.0722));
+        float Cb = (sig.b - Y) / 1.8556;
+        float Cr = (sig.r - Y) / 1.5748;
+        p = float2(0.5 + Cb * gScale, 0.5 - Cr * gScale);
         return true;
     }
-    float3 XYZ = Rec709_to_XYZ(max(c, 0.0));
+    // CIE: do NOT clamp negatives — wide-gamut colors (scRGB channels < 0) must be
+    // allowed to plot outside the Rec.709 triangle.
+    float3 XYZ = Rec709_to_XYZ(c);
     float s = XYZ.x + XYZ.y + XYZ.z;
     if (s <= 1e-6) return false;
     if (gMode == 1) {

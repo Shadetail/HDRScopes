@@ -12,6 +12,7 @@ struct ScopeInput {
     ID3D11ShaderResourceView* srcSRV = nullptr;
     UINT srcW = 0, srcH = 0;
     int  cropX = 0, cropY = 0, cropW = 0, cropH = 0;
+    float sdrWhiteNits = 200.0f; // captured monitor's SDR white (for vectorscope normalize)
 };
 
 // Per-frame geometry + environment handed to render/overlay.
