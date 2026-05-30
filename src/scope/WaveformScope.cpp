@@ -288,7 +288,8 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
                 if (cmn <= cmx) { mn = std::min(mn, cmn); mx = std::max(mx, cmx); }
             }
             if (mn > mx) continue; // no samples in this column
-            float x = left + (float)(((double)c / (extCols_ - 1) - f.panX) * f.zoom * graphW);
+            float u = ((float)c + 0.5f) / (float)extCols_;
+            float x = left + (u - f.panX) * f.zoom * graphW;
             hi.push_back(ImVec2(x, binToY(mx)));
             lo.push_back(ImVec2(x, binToY(mn)));
         }

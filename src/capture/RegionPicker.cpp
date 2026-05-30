@@ -155,7 +155,12 @@ bool PickScreenRegion(const RECT& outputRect, RECT& out) {
     HWND h = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, kClass, L"",
         WS_POPUP, outputRect.left, outputRect.top, s.w, s.h,
         nullptr, nullptr, wc.hInstance, nullptr);
-    if (!h) return false;
+    if (!h) {
+        SelectObject(s.shotDC, s.shotOld);
+        DeleteObject(s.shotBmp);
+        DeleteDC(s.shotDC);
+        return false;
+    }
 
     g_ps = &s;
     ShowWindow(h, SW_SHOW);

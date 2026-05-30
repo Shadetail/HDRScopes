@@ -80,15 +80,24 @@ bool CaptureSource::SelectOutput(POINT pt, int explicitIndex) {
 
     // Fallback: first attached output.
     if (!chosen) {
-        HDRLog("[CaptureSource] no output matched; falling back to primary.");
-        ComPtr<IDXGIAdapter1> ad0;
-        if (factory->EnumAdapters1(0, &ad0) != DXGI_ERROR_NOT_FOUND) {
-            ComPtr<IDXGIOutput> o0;
-            if (ad0->EnumOutputs(0, &o0) != DXGI_ERROR_NOT_FOUND) {
-                o0->GetDesc(&chosenDesc);
-                chosen = o0;
-                chosenIndex = 0;
+        HDRLog("[CaptureSource] no output matched; falling back to the first attached output.");
+        globalIndex = 0;
+        for (UINT a = 0; factory->EnumAdapters1(a, &adapter) != DXGI_ERROR_NOT_FOUND; ++a) {
+            ComPtr<IDXGIOutput> output;
+            for (UINT o = 0; adapter->EnumOutputs(o, &output) != DXGI_ERROR_NOT_FOUND; ++o) {
+                DXGI_OUTPUT_DESC desc = {};
+                output->GetDesc(&desc);
+                if (desc.AttachedToDesktop) {
+                    chosen = output;
+                    chosenDesc = desc;
+                    chosenIndex = globalIndex;
+                    break;
+                }
+                ++globalIndex;
+                output.Reset();
             }
+            if (chosen) break;
+            adapter.Reset();
         }
     }
     if (!chosen) {

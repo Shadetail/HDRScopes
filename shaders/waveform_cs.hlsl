@@ -30,7 +30,9 @@ float ScrgbLuminance(float3 c)
 
 int ValueToBin(float scrgbValue)
 {
-    float pos01 = LinearToPQY(max(scrgbValue, 0.0), MAX_PQ_SCRGB);
+    float x = pow(max(scrgbValue, 0.0) / MAX_PQ_SCRGB, PQ.N);
+    float nd = (PQ.C1 + PQ.C2 * x) / (1.0 + PQ.C3 * x);
+    float pos01 = pow(nd, PQ.M);
     int bin = (int)(pos01 * (gBins - 1) + 0.5);
     return clamp(bin, 0, (int)gBins - 1);
 }

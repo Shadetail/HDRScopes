@@ -52,6 +52,7 @@ void ChromaScope::Compute(const ScopeInput& in, const Settings& s) {
     D3D11_MAPPED_SUBRESOURCE ms;
     if (SUCCEEDED(context_->Map(computeCB_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
         CCB* cb = (CCB*)ms.pData;
+        *cb = {};
         cb->size = size_; cb->mode = (UINT)r.mode; cb->sampleW = sw; cb->sampleH = sh;
         cb->useBilinear = s.bilinearDownsample ? 1u : 0u;
         cb->cropX = in.cropX; cb->cropY = in.cropY; cb->cropW = in.cropW; cb->cropH = in.cropH;
@@ -90,6 +91,7 @@ void ChromaScope::Render(UINT outW, UINT outH, const ScopeFrame&, const Settings
     D3D11_MAPPED_SUBRESOURCE ms;
     if (SUCCEEDED(context_->Map(graphCB_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
         GCB* cb = (GCB*)ms.pData;
+        *cb = {};
         cb->size = size_; cb->mode = (UINT)r.mode; cb->colorize = s.colorize ? 1u : 0u;
         cb->gain = Gain(s); cb->minX = r.minX; cb->maxX = r.maxX; cb->minY = r.minY; cb->maxY = r.maxY; cb->scale = r.scale;
         context_->Unmap(graphCB_.Get(), 0);

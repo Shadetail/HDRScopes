@@ -45,13 +45,13 @@ float4 PSMain(VSOut i) : SV_Target
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
         return float4(0, 0, 0, 1);
 
-    uint col = (uint)(uv.x * (gGraphCols - 1) + 0.5);
+    uint col = min((uint)(uv.x * gGraphCols), gGraphCols - 1);
     // Screen y=0 is top of the (possibly SDR-white-scaled) axis.
     float fullPos = (1.0 - uv.y) * gYAxisTop01;
     int   bin = (int)(fullPos * (gBins - 1) + 0.5);
     if (bin < 0 || bin >= (int)gBins) return float4(0, 0, 0, 1);
 
-    uint extCol = (uint)(uv.x * (gExtentCols - 1) + 0.5);
+    uint extCol = min((uint)(uv.x * gExtentCols), gExtentCols - 1);
 
     float3 rgb = float3(0, 0, 0);
     uint chN = (gMode == 0) ? 1u : 3u;

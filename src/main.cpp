@@ -243,7 +243,14 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         ID3D11ShaderResourceView* srcSRV = nullptr; UINT srcW = 0, srcH = 0; RECT outRect = {};
         bool usingTest = g_set.debugShowTestPattern && g_set.useTestPattern;
         if (usingTest) { g_test.Generate(); srcSRV = g_test.SRV(); srcW = g_test.Width(); srcH = g_test.Height(); outRect = { 0,0,(LONG)srcW,(LONG)srcH }; }
-        else { g_capture.AcquireFrame(); srcSRV = g_capture.SRV(); srcW = g_capture.Width(); srcH = g_capture.Height(); outRect = g_capture.DesktopRect(); }
+        else {
+            if (g_capture.AcquireFrame()) {
+                srcSRV = g_capture.SRV();
+                srcW = g_capture.Width();
+                srcH = g_capture.Height();
+            }
+            outRect = g_capture.DesktopRect();
+        }
 
         // ---- Region crop ----
         Region region; region.mode = (RegionMode)g_set.regionMode;
@@ -267,8 +274,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
                     if (g_probe.Read(srcSRV, srcW, srcH, tx, ty, rgb)) {
                         probe.probeValid = true;
                         probe.probeRGB[0] = rgb[0]; probe.probeRGB[1] = rgb[1]; probe.probeRGB[2] = rgb[2];
-                        probe.probeU = (float)(tx - cx) / std::max(1, cw);
-                        probe.probeV = (float)(ty - cy) / std::max(1, ch);
+                        probe.probeU = ((float)(tx - cx) + 0.5f) / (float)std::max(1, cw);
+                        probe.probeV = ((float)(ty - cy) + 0.5f) / (float)std::max(1, ch);
                     }
                 }
             }

@@ -15,7 +15,12 @@ SamplerState      gLinear : register(s0);
 RWTexture2D<uint> gHist   : register(u0); // (gBins, 4): row 0=L,1=R,2=G,3=B
 
 float ScrgbLum(float3 c) { return dot(c, float3(0.2126390, 0.7151686, 0.0721923)); }
-int ToBin(float v) { float p = LinearToPQY(max(v, 0.0), MAX_PQ_SCRGB); return clamp((int)(p * (gBins - 1) + 0.5), 0, (int)gBins - 1); }
+int ToBin(float v) {
+    float x = pow(max(v, 0.0) / MAX_PQ_SCRGB, PQ.N);
+    float nd = (PQ.C1 + PQ.C2 * x) / (1.0 + PQ.C3 * x);
+    float p = pow(nd, PQ.M);
+    return clamp((int)(p * (gBins - 1) + 0.5), 0, (int)gBins - 1);
+}
 
 [numthreads(8, 8, 1)]
 void CSHistogram(uint3 id : SV_DispatchThreadID)

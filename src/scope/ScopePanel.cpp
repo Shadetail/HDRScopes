@@ -10,10 +10,11 @@ void ScopePanel::Draw(int index, const ImVec2& panelP0, const ImVec2& panelP1,
     if (!scope_ || type_ != want) {
         if (scope_) scope_->Shutdown();
         scope_ = CreateScope(want);
-        if (scope_) scope_->Init(device_);
+        if (scope_ && !scope_->Init(device_)) scope_.reset();
         type_ = want;
     }
     if (!scope_) return;
+    if (!input.srcSRV || input.srcW == 0 || input.srcH == 0 || input.cropW <= 0 || input.cropH <= 0) return;
 
     // Compute the histogram for this frame.
     scope_->Compute(input, s);
