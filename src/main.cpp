@@ -24,6 +24,8 @@
 #include <d3d11.h>
 #include <timeapi.h>
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
@@ -82,6 +84,11 @@ static void DrawControlsWindow(float btnX, float btnY) {
     ImGui::SetNextWindowPos(ImVec2(btnX + 60.0f - w, btnY), ImGuiCond_Appearing);
     if (!ImGui::Begin("Controls", &g_showControls)) { ImGui::End(); return; }
 
+    // Distinct blue for the category headers/expanders so sections read clearly.
+    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.13f, 0.34f, 0.62f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.20f, 0.45f, 0.78f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.24f, 0.50f, 0.85f, 1.0f));
+
     if (ImGui::CollapsingHeader("Capture", ImGuiTreeNodeFlags_DefaultOpen)) {
         auto outs = CaptureSource::EnumerateOutputs();
         int cur = g_capture.OutputIndex();
@@ -139,6 +146,7 @@ static void DrawControlsWindow(float btnX, float btnY) {
         if (ImGui::Combo("Anti-alias (supersample)", &ssi, ss, 3)) g_set.renderSupersample = ssi == 0 ? 1 : (ssi == 1 ? 2 : 4);
         ImGui::SetNextItemWidth(160);
         ImGui::SliderFloat("Source blur", &g_set.sourceBlur, 0.0f, 8.0f, "%.1f px");
+        if (g_set.sourceBlur > 0.05f) ImGui::Checkbox("Blur affects waveform extents", &g_set.blurExtents);
         ImGui::Checkbox("Show FPS", &g_set.showFps);
         ImGui::SetNextItemWidth(160);
         ImGui::SliderInt("FPS limit (0=vsync)", &g_set.fpsLimit, 0, 240);
@@ -148,6 +156,7 @@ static void DrawControlsWindow(float btnX, float btnY) {
         ImGui::SliderFloat("Size", &g_set.hoverCircleRadius, 3.0f, 24.0f, "%.0f");
         ImGui::Checkbox("Hover readout (top)", &g_set.showHoverReadout);
         ImGui::SameLine(); ImGui::Checkbox("8-bit SDR", &g_set.showSdr8bit);
+        if (g_set.showHoverReadout) ImGui::Checkbox("Readout background", &g_set.readoutBg);
     }
 
     if (ImGui::CollapsingHeader("Graticule", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -171,7 +180,17 @@ static void DrawControlsWindow(float btnX, float btnY) {
         ImGui::Checkbox("Show test pattern source", &g_set.debugShowTestPattern);
         if (g_set.debugShowTestPattern) ImGui::Checkbox("Use test pattern", &g_set.useTestPattern);
         else g_set.useTestPattern = false;
+
+        if (ImGui::Button("Reset all settings to default")) {
+            // Keep the window placement; reset everything else to defaults.
+            Settings def;
+            def.wndL = g_set.wndL; def.wndT = g_set.wndT; def.wndR = g_set.wndR; def.wndB = g_set.wndB;
+            def.wndShow = g_set.wndShow; def.outputIndex = g_set.outputIndex;
+            g_set = def;
+        }
     }
+
+    ImGui::PopStyleColor(3);
     ImGui::End();
 }
 
@@ -184,14 +203,52 @@ static void Sdr8(float scrgb, float sdrNorm, char* out, size_t n) {
     snprintf(out, n, "%d", (int)(e * 255.0f + 0.5f));
 }
 
+// Format a nit value with magnitude-appropriate precision: ~4 significant
+// figures, trailing zeros stripped. e.g. 0.000634, 0.0101, 13.5, 104.6, 500.
+static void FormatNits(double v, char* out, size_t n) {
+    if (!(v > 0.0)) { snprintf(out, n, "0"); return; }
+    int e = (int)std::floor(std::log10(v));
+    int d = std::clamp(3 - e, 0, 9);  // decimals for ~4 sig figs
+    snprintf(out, n, "%.*f", d, v);
+    if (d > 0) {  // strip trailing zeros and a dangling decimal point
+        char* dot = strchr(out, '.');
+        if (dot) {
+            char* end = out + strlen(out) - 1;
+            while (end > dot && *end == '0') *end-- = '\0';
+            if (end == dot) *end = '\0';
+        }
+    }
+}
+
 // L/R/G/B nit readout (+ optional 8-bit SDR) for the hovered pixel, top-center.
 static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float sdrNits, ImVec2 a0, ImVec2 a1) {
     if (!s.showHoverReadout || !probe.probeValid) return;
     double lum = 0.2126390 * probe.probeRGB[0] + 0.7151686 * probe.probeRGB[1] + 0.0721923 * probe.probeRGB[2];
-    char line1[160];
-    snprintf(line1, sizeof(line1), "L %.0f    R %.0f   G %.0f   B %.0f   nits",
-             std::max(0.0, lum) * 80.0, std::max(0.0f, probe.probeRGB[0]) * 80.0,
-             std::max(0.0f, probe.probeRGB[1]) * 80.0, std::max(0.0f, probe.probeRGB[2]) * 80.0);
+    char vl[32], vr[32], vg[32], vb[32];
+    FormatNits(std::max(0.0, lum) * 80.0,             vl, sizeof(vl));
+    FormatNits(std::max(0.0f, probe.probeRGB[0]) * 80.0, vr, sizeof(vr));
+    FormatNits(std::max(0.0f, probe.probeRGB[1]) * 80.0, vg, sizeof(vg));
+    FormatNits(std::max(0.0f, probe.probeRGB[2]) * 80.0, vb, sizeof(vb));
+
+    // Channel letters get channel colors (blue brightened so it reads on black).
+    const ImU32 white = IM_COL32(235, 235, 235, 240);
+    const ImU32 colR  = IM_COL32(255,  40,  40, 240);
+    const ImU32 colG  = IM_COL32( 40, 220,  40, 240);
+    const ImU32 colB  = IM_COL32(  0, 123, 255, 240);
+
+    struct Seg { char txt[40]; ImU32 col; };
+    Seg segs[12]; int nseg = 0;
+    auto add = [&](const char* t, ImU32 c) {
+        snprintf(segs[nseg].txt, sizeof(segs[nseg].txt), "%s", t); segs[nseg].col = c; ++nseg;
+    };
+    add("L ", white); add(vl, white); add("    ", white);
+    add("R ", colR);  add(vr, white); add("   ", white);
+    add("G ", colG);  add(vg, white); add("   ", white);
+    add("B ", colB);  add(vb, white); add("   nits", white);
+
+    float widths[12]; float total = 0;
+    for (int i = 0; i < nseg; ++i) { widths[i] = ImGui::CalcTextSize(segs[i].txt).x; total += widths[i]; }
+
     char line2[160] = "";
     if (s.showSdr8bit) {
         float sn = sdrNits / 80.0f;
@@ -199,14 +256,25 @@ static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float s
         Sdr8(probe.probeRGB[0], sn, r, sizeof(r)); Sdr8(probe.probeRGB[1], sn, g, sizeof(g)); Sdr8(probe.probeRGB[2], sn, b, sizeof(b));
         snprintf(line2, sizeof(line2), "SDR  %s, %s, %s", r, g, b);
     }
+
     ImDrawList* dl = ImGui::GetWindowDrawList();
     float cx = (a0.x + a1.x) * 0.5f;
-    ImVec2 t1 = ImGui::CalcTextSize(line1);
-    dl->AddText(ImVec2(cx - t1.x * 0.5f, a0.y + 6), IM_COL32(235, 235, 235, 240), line1);
-    if (line2[0]) {
-        ImVec2 t2 = ImGui::CalcTextSize(line2);
-        dl->AddText(ImVec2(cx - t2.x * 0.5f, a0.y + 6 + t1.y + 2), IM_COL32(180, 200, 235, 230), line2);
+    const float lineH = ImGui::GetTextLineHeight();
+    const float y = a0.y + 11;  // moved 5px down so it clears the 10k line
+    float w2 = line2[0] ? ImGui::CalcTextSize(line2).x : 0.0f;
+
+    // Optional translucent black plate behind the readout for legibility.
+    if (s.readoutBg) {
+        float bw = std::max(total, w2);
+        float bh = lineH + (line2[0] ? lineH + 2 : 0);
+        ImVec2 p0(cx - bw * 0.5f - 6, y - 3), p1(cx + bw * 0.5f + 6, y + bh + 3);
+        dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 140), 4.0f);
     }
+
+    float x = cx - total * 0.5f;
+    for (int i = 0; i < nseg; ++i) { dl->AddText(ImVec2(x, y), segs[i].col, segs[i].txt); x += widths[i]; }
+    if (line2[0])
+        dl->AddText(ImVec2(cx - w2 * 0.5f, y + lineH + 2), IM_COL32(180, 200, 235, 230), line2);
 }
 
 // Layout rects within the given content area.
@@ -323,13 +391,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         if (srcSRV && g_set.sourceBlur > 0.05f)
             scopeSRV = g_blur.Apply(srcSRV, srcW, srcH, g_set.sourceBlur);
 
-        ScopeInput input; input.srcSRV = scopeSRV; input.srcW = srcW; input.srcH = srcH;
+        ScopeInput input; input.srcSRV = scopeSRV; input.rawSRV = srcSRV; input.srcW = srcW; input.srcH = srcH;
         input.cropX = cx; input.cropY = cy; input.cropW = cw; input.cropH = ch;
         input.sdrWhiteNits = g_sdrWhiteNits;
 
         // ---- Hover probe (source pixel under cursor) ----
         ScopeFrame probe;
-        if (g_set.showHoverProbe && !usingTest && srcSRV) {
+        if ((g_set.showHoverProbe || g_set.showHoverReadout) && !usingTest && srcSRV) {
             POINT cur; GetCursorPos(&cur);
             if (PtInRect(&outRect, cur)) {
                 int tx = cur.x - outRect.left, ty = cur.y - outRect.top;
@@ -359,7 +427,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         ImVec2 area0 = ImGui::GetWindowPos();
         ImVec2 area1 = ImVec2(area0.x + ImGui::GetWindowSize().x, area0.y + ImGui::GetWindowSize().y);
         int count = (int)g_set.layout;
-        ImVec2 r0[4], r1[4]; LayoutRects(area0, area1, count, r0, r1);
+        // Reserve a 5px strip at the very top so the "10k" nit label isn't clipped.
+        ImVec2 scopeArea0 = ImVec2(area0.x, area0.y + 5.0f);
+        ImVec2 r0[4], r1[4]; LayoutRects(scopeArea0, area1, count, r0, r1);
         for (int i = 0; i < count; ++i)
             g_panels[i].Draw(i, r0[i], r1[i], input, g_set, g_sdrWhiteNits, probe, uiB);
 
@@ -368,14 +438,28 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         for (int i = 0; i < count; ++i)
             dl->AddRect(r0[i], r1[i], IM_COL32(60, 60, 60, 255));
 
-        // Top-center hover readout.
-        DrawHoverReadout(probe, g_set, g_sdrWhiteNits, area0, area1);
+        // Hover readout, centered over the left half (so it clears the divider/buttons
+        // in 2/4-up layouts and stays over the left scope).
+        ImVec2 readoutR1 = (count == 1) ? area1 : ImVec2(area0.x + (area1.x - area0.x) * 0.5f, area1.y);
+        DrawHoverReadout(probe, g_set, g_sdrWhiteNits, area0, readoutR1);
+
+        // Opaque widget backgrounds for the floating top strips (so they read
+        // clearly over the scope graphs instead of being semi-transparent).
+        auto pushOpaqueWidgets = [] {
+            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.20f, 0.42f, 0.78f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.54f, 0.92f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.16f, 0.36f, 0.70f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.16f, 0.30f, 0.55f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.24f, 0.42f, 0.72f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImVec4(0.28f, 0.48f, 0.80f, 1.0f));
+        };
 
         // Top-right strip: (single layout) [scope combo] [Zoom] [1][2][4][Controls].
         const float comboW = 150.0f;
-        float stripY = area0.y + 6;
-        float stripX = area1.x - 320 - (count == 1 ? comboW + 8 : 0);
+        float stripY = area0.y + 11;                                   // 5px down to clear the 10k line
+        float stripX = area1.x - 240 - (count == 1 ? comboW + 8 : 0);  // 80px right, snug in the corner
         ImGui::SetCursorScreenPos(ImVec2(stripX, stripY));
+        pushOpaqueWidgets();
         if (count == 1) {
             ImGui::PushID(3000); ImGui::SetNextItemWidth(comboW);
             ScopeCombo("##sc0", g_set.panelScope[0]); ImGui::PopID(); ImGui::SameLine();
@@ -388,20 +472,27 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         if (ImGui::Button("4")) g_set.layout = LayoutMode::Quad; ImGui::SameLine();
         float ctrlBtnX = ImGui::GetCursorScreenPos().x;
         if (ImGui::Button("Controls")) g_showControls = !g_showControls;
+        ImGui::PopStyleColor(6);
 
         // In multi-layout, each panel gets its own scope combo at its top-left.
-        if (count > 1) for (int i = 0; i < count; ++i) {
-            ImGui::SetCursorScreenPos(ImVec2(r0[i].x + 8, r0[i].y + 6));
-            ImGui::PushID(2000 + i); ImGui::SetNextItemWidth(140);
-            ScopeCombo("##sc", g_set.panelScope[i]);
-            ImGui::PopID();
+        if (count > 1) {
+            pushOpaqueWidgets();
+            for (int i = 0; i < count; ++i) {
+                ImGui::SetCursorScreenPos(ImVec2(r0[i].x + 8, r0[i].y + 6));
+                ImGui::PushID(2000 + i); ImGui::SetNextItemWidth(140);
+                ScopeCombo("##sc", g_set.panelScope[i]);
+                ImGui::PopID();
+            }
+            ImGui::PopStyleColor(6);
         }
 
         // Bottom-right FPS.
         if (g_set.showFps) {
             char fps[32]; snprintf(fps, sizeof(fps), "%.0f FPS", ImGui::GetIO().Framerate);
-            ImVec2 ts = ImGui::CalcTextSize(fps);
-            dl->AddText(ImVec2(area1.x - ts.x - 10, area1.y - 22), IM_COL32(200, 200, 200, 220), fps);
+            float fsz = ImGui::GetFontSize() * 0.85f;            // slightly smaller font
+            float w = ImGui::CalcTextSize(fps).x * 0.85f;
+            dl->AddText(ImGui::GetFont(), fsz, ImVec2(area1.x - w - 16, area1.y - 24),  // 6px left, 2px up
+                        IM_COL32(200, 200, 200, 220), fps);
         }
 
         ImGui::End();

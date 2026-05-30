@@ -9,13 +9,13 @@ struct WaveCB {
     UINT graphCols, bins, channels, mode;
     UINT extentCols, sampleW, sampleH, useBilinear;
     INT  cropX, cropY, cropW, cropH;
-    UINT srcW, srcH, pad0, pad1;
+    UINT srcW, srcH, lowPassRadius, blurExtents;
 };
 struct GraphCB {
     UINT  graphCols, bins, channels, mode;
     float gain; UINT colorize, extentsPoints, chanMask;
     float uvScaleX, uvScaleY, uvOffX, uvOffY;
-    float yAxisTop01; UINT extentCols; float lowPassCols, p1;
+    float yAxisTop01; UINT extentCols; float extentsOpacity, p1;
 };
 inline UINT DivUp(UINT a, UINT b) { return (a + b - 1) / b; }
 }
@@ -45,7 +45,8 @@ bool WaveformScope::Init(ID3D11Device* dev) {
 }
 
 Margins WaveformScope::GetMargins(const Settings&) const {
-    return { 58.0f, 14.0f, 10.0f, 10.0f };
+    // Only a left margin (room for nit labels); graph is flush top/right/bottom.
+    return { 30.0f, 0.0f, 0.0f, 0.0f };
 }
 
 void WaveformScope::DimsFor(const Settings& s, int cropW, int cropH,
@@ -67,6 +68,7 @@ bool WaveformScope::EnsureBins(UINT graphCols, UINT bins, UINT channels, UINT ex
         return true;
     binsTex_.Reset(); binsUAV_.Reset(); binsSRV_.Reset();
     extTex_.Reset(); extUAV_.Reset(); extSRV_.Reset(); extStaging_.Reset();
+    colorTex_.Reset(); colorUAV_.Reset(); colorSRV_.Reset();
 
     auto mk = [&](UINT w, UINT h, ComPtr<ID3D11Texture2D>& t, ComPtr<ID3D11UnorderedAccessView>& u,
                   ComPtr<ID3D11ShaderResourceView>& sr) -> bool {
@@ -82,6 +84,8 @@ bool WaveformScope::EnsureBins(UINT graphCols, UINT bins, UINT channels, UINT ex
     };
     if (!mk(graphCols, bins * channels, binsTex_, binsUAV_, binsSRV_)) return false;
     if (!mk(extCols, 2 * channels, extTex_, extUAV_, extSRV_)) return false;
+    // Per-cell source colour sums (R,G,B stacked) for luminance colorize.
+    if (!mk(graphCols, bins * 3, colorTex_, colorUAV_, colorSRV_)) return false;
 
     graphCols_ = graphCols; bins_ = bins; channels_ = channels; extCols_ = extCols;
     return true;
@@ -96,6 +100,18 @@ void WaveformScope::Compute(const ScopeInput& in, const Settings& s) {
     if (!EnsureBins(graphCols, bins, channels, extCols)) return;
     perColSamples_ = std::max(1.0f, (float)sampleW * (float)sampleH / (float)graphCols);
 
+    // Low-pass radius (in source samples), scaled by the per-column footprint so
+    // wider sources get more pre-filtering. Only when the user enables low-pass.
+    UINT lowPassRadius = 0;
+    if (s.lowPass) {
+        float footprint = std::max(1.0f, (float)sampleW / (float)std::max(1u, graphCols));
+        lowPassRadius = (UINT)std::lround(std::clamp(s.lowPassAmount, 0.0f, 1.0f) * 6.0f * footprint);
+        lowPassRadius = std::min(lowPassRadius, 48u);
+    }
+    // Whether source blur should also affect the extents trace.
+    bool blurActive = (in.rawSRV != in.srcSRV) && in.rawSRV != nullptr;
+    UINT blurExtents = (!blurActive || s.blurExtents) ? 1u : 0u;
+
     D3D11_MAPPED_SUBRESOURCE ms;
     if (SUCCEEDED(context_->Map(computeCB_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
         WaveCB* cb = (WaveCB*)ms.pData;
@@ -103,33 +119,34 @@ void WaveformScope::Compute(const ScopeInput& in, const Settings& s) {
         cb->extentCols = extCols; cb->sampleW = sampleW; cb->sampleH = sampleH;
         cb->useBilinear = s.bilinearDownsample ? 1u : 0u;
         cb->cropX = in.cropX; cb->cropY = in.cropY; cb->cropW = in.cropW; cb->cropH = in.cropH;
-        cb->srcW = in.srcW; cb->srcH = in.srcH; cb->pad0 = cb->pad1 = 0;
+        cb->srcW = in.srcW; cb->srcH = in.srcH; cb->lowPassRadius = lowPassRadius; cb->blurExtents = blurExtents;
         context_->Unmap(computeCB_.Get(), 0);
     }
 
-    // Clear counts; clear extents via shader (min=bins, max=0).
+    // Clear counts + colour sums; clear extents via shader (min=bins, max=0).
     const UINT zero[4] = { 0, 0, 0, 0 };
     context_->ClearUnorderedAccessViewUint(binsUAV_.Get(), zero);
+    context_->ClearUnorderedAccessViewUint(colorUAV_.Get(), zero);
 
     ID3D11Buffer* cbs[] = { computeCB_.Get() };
     context_->CSSetConstantBuffers(0, 1, cbs);
-    ID3D11UnorderedAccessView* uavs[] = { binsUAV_.Get(), extUAV_.Get() };
-    context_->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
+    ID3D11UnorderedAccessView* uavs[] = { binsUAV_.Get(), extUAV_.Get(), colorUAV_.Get() };
+    context_->CSSetUnorderedAccessViews(0, 3, uavs, nullptr);
 
     context_->CSSetShader(csClearExt_.Get(), nullptr, 0);
     context_->Dispatch(DivUp(extCols, 8), DivUp(channels, 8), 1);
 
-    ID3D11ShaderResourceView* srvs[] = { in.srcSRV };
-    context_->CSSetShaderResources(0, 1, srvs);
+    ID3D11ShaderResourceView* srvs[] = { in.srcSRV, in.rawSRV ? in.rawSRV : in.srcSRV };
+    context_->CSSetShaderResources(0, 2, srvs);
     ID3D11SamplerState* samp[] = { linear_.Get() };
     context_->CSSetSamplers(0, 1, samp);
     context_->CSSetShader(csHisto_.Get(), nullptr, 0);
     context_->Dispatch(DivUp(sampleW, 8), DivUp(sampleH, 8), 1);
 
-    ID3D11UnorderedAccessView* nUAV[] = { nullptr, nullptr };
-    context_->CSSetUnorderedAccessViews(0, 2, nUAV, nullptr);
-    ID3D11ShaderResourceView* nSRV[] = { nullptr };
-    context_->CSSetShaderResources(0, 1, nSRV);
+    ID3D11UnorderedAccessView* nUAV[] = { nullptr, nullptr, nullptr };
+    context_->CSSetUnorderedAccessViews(0, 3, nUAV, nullptr);
+    ID3D11ShaderResourceView* nSRV[] = { nullptr, nullptr };
+    context_->CSSetShaderResources(0, 2, nSRV);
 
     extReadbackValid_ = false;
     if (s.extents && s.extentsStyle == 1) ReadbackExtents();
@@ -191,7 +208,7 @@ void WaveformScope::Render(UINT outW, UINT outH, const ScopeFrame& f, const Sett
         cb->uvScaleX = 1.0f / f.zoom; cb->uvScaleY = 1.0f / f.zoom;
         cb->uvOffX = f.panX; cb->uvOffY = f.panY;
         cb->yAxisTop01 = (float)YAxisTop01(f, s); cb->extentCols = extCols_;
-        cb->lowPassCols = s.lowPass ? (1.0f + s.lowPassAmount * 8.0f) : 0.0f;
+        cb->extentsOpacity = std::clamp(s.extentsOpacity, 0.0f, 1.0f);
         cb->p1 = 0;
         context_->Unmap(graphCB_.Get(), 0);
     }
@@ -208,11 +225,11 @@ void WaveformScope::Render(UINT outW, UINT outH, const ScopeFrame& f, const Sett
     context_->PSSetShader(ps_.Get(), nullptr, 0);
     ID3D11Buffer* cbs[] = { graphCB_.Get() };
     context_->PSSetConstantBuffers(0, 1, cbs);
-    ID3D11ShaderResourceView* srvs[] = { binsSRV_.Get(), extSRV_.Get() };
-    context_->PSSetShaderResources(0, 2, srvs);
+    ID3D11ShaderResourceView* srvs[] = { binsSRV_.Get(), extSRV_.Get(), colorSRV_.Get() };
+    context_->PSSetShaderResources(0, 3, srvs);
     context_->Draw(3, 0);
-    ID3D11ShaderResourceView* nSRV[] = { nullptr, nullptr };
-    context_->PSSetShaderResources(0, 2, nSRV);
+    ID3D11ShaderResourceView* nSRV[] = { nullptr, nullptr, nullptr };
+    context_->PSSetShaderResources(0, 3, nSRV);
     ID3D11RenderTargetView* nRTV[] = { nullptr };
     context_->OMSetRenderTargets(1, nRTV, nullptr);
 }
@@ -244,22 +261,27 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
     const ImU32 colMinor = ImGui::GetColorU32(ImVec4(gc.x, gc.y, gc.z, gc.w * 0.6f));
     const ImU32 colText  = ImGui::GetColorU32(ImVec4(0.82f, 0.82f, 0.82f, std::max(0.5f, s.graticuleOpacity)));
 
-    dl->PushClipRect(f.graphP0, f.graphP1, true);
+    // Major decade lines span the graph (clipped to it).
     const double decades[] = { 1, 10, 100, 1000, 10000 };
+    dl->PushClipRect(f.graphP0, f.graphP1, true);
     for (double dec : decades) {
         float y = NitsToScreenY(dec, f, s);
         if (inRange(y)) dl->AddLine(ImVec2(left, y), ImVec2(right, y), colMajor, 1.0f);
-        if (dec < 10000.0) {
-            for (int m = 2; m <= 9; ++m) {
-                double n = dec * m; if (n > 10000.0) break;
-                float my = NitsToScreenY(n, f, s);
-                if (inRange(my)) dl->AddLine(ImVec2(left, my), ImVec2(left + 50.0f, my), colMinor, 1.0f);
-            }
-        }
     }
     dl->PopClipRect();
 
-    // Decade labels in the LEFT margin (outside the graph).
+    // 10% minor ticks sit OUTSIDE the graph in the left margin (left-20 .. left).
+    for (double dec : decades) {
+        if (dec >= 10000.0) break;
+        for (int m = 2; m <= 9; ++m) {
+            double n = dec * m; if (n > 10000.0) break;
+            float my = NitsToScreenY(n, f, s);
+            if (inRange(my)) dl->AddLine(ImVec2(left - 20.0f, my), ImVec2(left, my), colMinor, 1.0f);
+        }
+    }
+
+    // Decade labels in the LEFT margin (outside the graph). The topmost ("10k")
+    // is clamped so it isn't clipped off the top of the window.
     for (double dec : decades) {
         float y = NitsToScreenY(dec, f, s);
         if (!inRange(y)) continue;
@@ -267,7 +289,8 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
         if (dec >= 1000.0) snprintf(lab, sizeof(lab), "%gk", dec / 1000.0);
         else               snprintf(lab, sizeof(lab), "%g", dec);
         ImVec2 ts = ImGui::CalcTextSize(lab);
-        dl->AddText(ImVec2(left - 6.0f - ts.x, y - ts.y * 0.5f), colText, lab);
+        float ly = std::max(y - ts.y * 0.5f, top);
+        dl->AddText(ImVec2(left - 4.0f - ts.x, ly), colText, lab);
     }
 
     // Extents white envelope line (style 1).
@@ -294,9 +317,10 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
             hi.push_back(ImVec2(x, binToY(mx)));
             lo.push_back(ImVec2(x, binToY(mn)));
         }
+        ImU32 envCol = IM_COL32(255, 255, 255, (int)(std::clamp(s.extentsOpacity, 0.0f, 1.0f) * 230.0f));
         dl->PushClipRect(f.graphP0, f.graphP1, true);
-        if (hi.size() > 1) dl->AddPolyline(hi.data(), (int)hi.size(), IM_COL32(255, 255, 255, 230), 0, 1.0f);
-        if (lo.size() > 1) dl->AddPolyline(lo.data(), (int)lo.size(), IM_COL32(255, 255, 255, 230), 0, 1.0f);
+        if (hi.size() > 1) dl->AddPolyline(hi.data(), (int)hi.size(), envCol, 0, 1.0f);
+        if (lo.size() > 1) dl->AddPolyline(lo.data(), (int)lo.size(), envCol, 0, 1.0f);
         dl->PopClipRect();
     }
 
@@ -373,11 +397,13 @@ void WaveformScope::DrawControls(Settings& s) {
         const char* styles[] = { "Colored points", "White envelope line" };
         ImGui::Combo("##extstyle", &s.extentsStyle, styles, 2);
         ImGui::Checkbox("Supersample extents", &s.extentsSupersample);
+        ImGui::SetNextItemWidth(150);
+        ImGui::SliderFloat("Extents opacity", &s.extentsOpacity, 0.0f, 1.0f, "%.2f");
     }
     ImGui::SliderFloat("Brightness", &s.gain, 0.001f, 0.5f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::Checkbox("Zoom Y to SDR white", &s.sdrWhiteZoom);
     ImGui::Checkbox("Low pass filter", &s.lowPass);
-    if (s.lowPass) { ImGui::SameLine(); ImGui::SetNextItemWidth(120); ImGui::SliderFloat("##lpa", &s.lowPassAmount, 0.0f, 1.0f, "%.2f"); }
+    if (s.lowPass) { ImGui::SameLine(); ImGui::SetNextItemWidth(120); ImGui::SliderFloat("Strength##lpa", &s.lowPassAmount, 0.0f, 1.0f, "%.2f"); }
 
     // Reference lines: custom count, log drag (shift = 10x finer), thickness.
     ImGui::SeparatorText("Reference lines");
@@ -403,6 +429,7 @@ void WaveformScope::Shutdown() {
     csClearExt_.Reset(); csHisto_.Reset(); computeCB_.Reset(); linear_.Reset();
     binsTex_.Reset(); binsUAV_.Reset(); binsSRV_.Reset();
     extTex_.Reset(); extUAV_.Reset(); extSRV_.Reset(); extStaging_.Reset();
+    colorTex_.Reset(); colorUAV_.Reset(); colorSRV_.Reset();
     vs_.Reset(); ps_.Reset(); graphCB_.Reset();
     rt_.Reset(); rtv_.Reset(); rtSRV_.Reset();
     context_.Reset(); device_.Reset();

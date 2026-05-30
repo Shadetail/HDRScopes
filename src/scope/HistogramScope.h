@@ -17,7 +17,8 @@ public:
 
 private:
     bool EnsureRT(UINT w, UINT h);
-    float NitsToScreenX(double nits, const ScopeFrame&) const;
+    float NitsToScreenX(double nits, const ScopeFrame&, const Settings&) const;
+    double XAxisTop01(const ScopeFrame&, const Settings&) const;
 
     ComPtr<ID3D11Device> device_; ComPtr<ID3D11DeviceContext> context_;
     ComPtr<ID3D11ComputeShader> cs_;

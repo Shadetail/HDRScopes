@@ -38,9 +38,9 @@ private:
     ComPtr<ID3D11ComputeShader> csClearExt_, csHisto_;
     ComPtr<ID3D11Buffer>        computeCB_;
     ComPtr<ID3D11SamplerState>  linear_;
-    ComPtr<ID3D11Texture2D>           binsTex_, extTex_, extStaging_;
-    ComPtr<ID3D11UnorderedAccessView> binsUAV_, extUAV_;
-    ComPtr<ID3D11ShaderResourceView>  binsSRV_, extSRV_;
+    ComPtr<ID3D11Texture2D>           binsTex_, extTex_, extStaging_, colorTex_;
+    ComPtr<ID3D11UnorderedAccessView> binsUAV_, extUAV_, colorUAV_;
+    ComPtr<ID3D11ShaderResourceView>  binsSRV_, extSRV_, colorSRV_;
 
     // Render.
     ComPtr<ID3D11VertexShader> vs_;

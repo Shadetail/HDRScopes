@@ -71,10 +71,12 @@ void VectorScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s) 
 }
 
 void VectorScope::DrawControls(Settings& s) {
-    ImGui::SliderFloat("Brightness", &s.vectorGain, 0.005f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-    ImGui::SliderFloat("Scale", &s.vectorScale, 0.2f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Brightness", &s.vectorGain, 0.00005f, 1.0f, "%.5f", ImGuiSliderFlags_Logarithmic);
+    ImGui::SliderFloat("Scale", &s.vectorScale, 0.06f, 1.0f, "%.2f");
     ImGui::Checkbox("Colorize", &s.colorize);
     ImGui::SliderInt("Dot size", &s.chromaDotRadius, 0, 6);
+    ImGui::Checkbox("Extents (gamut outline)", &s.extents);
+    if (s.extents) { ImGui::SameLine(); ImGui::SetNextItemWidth(110); ImGui::SliderFloat("##exop", &s.extentsOpacity, 0.0f, 1.0f, "opacity %.2f"); }
     ImGui::Checkbox("Skin tone line", &s.vectorShowSkin);
     if (s.vectorShowSkin) ImGui::SliderFloat("Skin angle", &s.vectorSkinAngleDeg, 90.0f, 160.0f, "%.1f deg");
 }

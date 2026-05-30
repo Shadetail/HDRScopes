@@ -4,12 +4,24 @@
 
 cbuffer GCB : register(b0)
 {
-    uint  gSize, gMode, gColorize, _p0;
+    uint  gSize, gMode, gColorize, gExtents;
     float gGain, gMinX, gMaxX, gMinY;
     float gMaxY, gScale, gUVScaleX, gUVScaleY;
-    float gUVOffX, gUVOffY, gDotRadius, _p2;
+    float gUVOffX, gUVOffY, gDotRadius, gExtentsOpacity;
 };
 Texture2D<uint> gAccum : register(t0);
+
+// Max accumulation count in a square neighbourhood (grid space).
+uint MaxCount(int2 c, int rad)
+{
+    uint m = 0;
+    for (int dy = -rad; dy <= rad; ++dy)
+    for (int dx = -rad; dx <= rad; ++dx) {
+        int2 q = clamp(c + int2(dx, dy), int2(0, 0), int2(gSize - 1, gSize - 1));
+        m = max(m, gAccum.Load(int3(q, 0)));
+    }
+    return m;
+}
 
 struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
 VSOut VSMain(uint vid : SV_VertexID) {
@@ -60,16 +72,28 @@ float4 PSMain(VSOut i) : SV_Target
     int2 px = int2(uv.x * gSize, uv.y * gSize);
     // Dilate by gDotRadius px in grid space so points are visible (size adjustable).
     int R = (int)(gDotRadius + 0.5);
-    uint count = 0;
-    for (int dy = -R; dy <= R; ++dy)
-    for (int dx = -R; dx <= R; ++dx) {
-        int2 q = clamp(px + int2(dx, dy), int2(0, 0), int2(gSize - 1, gSize - 1));
-        count = max(count, gAccum.Load(int3(q, 0)));
-    }
+    uint count = MaxCount(px, R);
     float a = saturate(1.0 - exp(-(float)count * gGain));
-    if (a <= 0.0) return float4(0, 0, 0, 1);
-    float3 col;
-    if (gColorize) col = (gMode == 0) ? VectorColor(uv) : CIEColor(uv);
-    else           col = float3(0.85, 0.95, 0.85);
-    return float4(col * a, 1.0);
+
+    float3 rgb = float3(0, 0, 0);
+    if (a > 0.0) {
+        float3 col = gColorize ? ((gMode == 0) ? VectorColor(uv) : CIEColor(uv))
+                               : float3(0.85, 0.95, 0.85);
+        rgb = col * a;
+    }
+
+    // Extents: a thin outline ring just OUTSIDE the occupied region, marking the
+    // reach (gamut) of the signal. Uses its own occupancy radius (independent of
+    // the cosmetic dot size) with a small minimum so sparse clouds still read as
+    // a connected envelope rather than a ring around every isolated point.
+    if (gExtents && gExtentsOpacity > 0.0) {
+        int eR = max(R, 2);
+        bool here = MaxCount(px, eR) > 0u;
+        bool near = MaxCount(px, eR + 1) > 0u;
+        if (!here && near)
+            rgb = max(rgb, float3(1, 1, 1) * gExtentsOpacity);
+    }
+
+    if (all(rgb <= 0.0)) return float4(0, 0, 0, 1);
+    return float4(rgb, 1.0);
 }

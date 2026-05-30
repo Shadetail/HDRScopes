@@ -5,7 +5,7 @@
 
 namespace {
 struct HCB { UINT bins, sampleW, sampleH, useBilinear; INT cropX, cropY, cropW, cropH; UINT srcW, srcH, p0, p1; };
-struct GCB { UINT bins, mode, chanMask, colorize; float gain, uvScaleX, uvOffX, pad; };
+struct GCB { UINT bins, mode, chanMask, colorize; float gain, uvScaleX, uvOffX, xAxisTop01; };
 inline UINT DivUp(UINT a, UINT b) { return (a + b - 1) / b; }
 void SampleDims(Quality q, int cw, int ch, UINT& sw, UINT& sh) {
     auto cap = [](int v, int m) { return (UINT)std::min(std::max(v, 1), m); };
@@ -90,7 +90,8 @@ void HistogramScope::Render(UINT outW, UINT outH, const ScopeFrame& f, const Set
         cb->chanMask = (s.histoChannelEnabled[0] ? 1u : 0u) | (s.histoChannelEnabled[1] ? 2u : 0u) | (s.histoChannelEnabled[2] ? 4u : 0u);
         cb->colorize = s.colorize ? 1u : 0u;
         cb->gain = s.histoGain * (2073600.0f / totalSamples_);
-        cb->uvScaleX = 1.0f / f.zoom; cb->uvOffX = f.panX; cb->pad = 0;
+        cb->uvScaleX = 1.0f / f.zoom; cb->uvOffX = f.panX;
+        cb->xAxisTop01 = (float)XAxisTop01(f, s);
         context_->Unmap(graphCB_.Get(), 0);
     }
     const float clear[4] = { 0, 0, 0, 1 };
@@ -108,8 +109,11 @@ void HistogramScope::Render(UINT outW, UINT outH, const ScopeFrame& f, const Set
     ID3D11RenderTargetView* nr[] = { nullptr }; context_->OMSetRenderTargets(1, nr, nullptr);
 }
 
-float HistogramScope::NitsToScreenX(double nits, const ScopeFrame& f) const {
-    double pos01 = pq::NitsToPos01(nits);
+double HistogramScope::XAxisTop01(const ScopeFrame& f, const Settings& s) const {
+    return s.histoSdrWhiteZoom ? std::max(pq::NitsToPos01(f.sdrWhiteNits), 1e-4) : 1.0;
+}
+float HistogramScope::NitsToScreenX(double nits, const ScopeFrame& f, const Settings& s) const {
+    double pos01 = pq::NitsToPos01(nits) / XAxisTop01(f, s);
     double screenUVx = (pos01 - f.panX) * f.zoom;
     return f.graphP0.x + (float)(screenUVx * (f.graphP1.x - f.graphP0.x));
 }
@@ -124,17 +128,17 @@ void HistogramScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& 
     dl->PushClipRect(f.graphP0, f.graphP1, true);
     const double decades[] = { 1, 10, 100, 1000, 10000 };
     for (double dec : decades) {
-        float x = NitsToScreenX(dec, f);
+        float x = NitsToScreenX(dec, f, s);
         if (inX(x)) dl->AddLine(ImVec2(x, top), ImVec2(x, bot), colMajor, 1.0f);
         if (dec < 10000.0) for (int m = 2; m <= 9; ++m) {
             double n = dec * m; if (n > 10000.0) break;
-            float mx = NitsToScreenX(n, f);
+            float mx = NitsToScreenX(n, f, s);
             if (inX(mx)) dl->AddLine(ImVec2(mx, bot - 12.0f), ImVec2(mx, bot), colMajor, 1.0f);
         }
     }
     dl->PopClipRect();
     for (double dec : decades) {
-        float x = NitsToScreenX(dec, f); if (!inX(x)) continue;
+        float x = NitsToScreenX(dec, f, s); if (!inX(x)) continue;
         char lab[16];
         if (dec >= 1000.0) snprintf(lab, sizeof(lab), "%gk", dec / 1000.0); else snprintf(lab, sizeof(lab), "%g", dec);
         ImVec2 ts = ImGui::CalcTextSize(lab);
@@ -146,12 +150,12 @@ void HistogramScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& 
         dl->PushClipRect(f.graphP0, f.graphP1, true);
         if (s.histoMode == 2) {
             double lum = 0.2126390 * f.probeRGB[0] + 0.7151686 * f.probeRGB[1] + 0.0721923 * f.probeRGB[2];
-            float x = NitsToScreenX(std::max(0.0, lum) * 80.0, f);
+            float x = NitsToScreenX(std::max(0.0, lum) * 80.0, f, s);
             if (inX(x)) dl->AddLine(ImVec2(x, top), ImVec2(x, bot), IM_COL32(255, 255, 255, 220), 1.2f);
         } else {
             const ImU32 cc[3] = { IM_COL32(255, 80, 80, 230), IM_COL32(80, 255, 80, 230), IM_COL32(110, 150, 255, 230) };
             for (int ch = 0; ch < 3; ++ch) {
-                float x = NitsToScreenX(std::max(0.0f, f.probeRGB[ch]) * 80.0, f);
+                float x = NitsToScreenX(std::max(0.0f, f.probeRGB[ch]) * 80.0, f, s);
                 if (inX(x)) dl->AddLine(ImVec2(x, top), ImVec2(x, bot), cc[ch], 1.2f);
             }
         }
@@ -182,6 +186,7 @@ void HistogramScope::DrawControls(Settings& s) {
     ImGui::SetNextItemWidth(180);
     if (ImGui::SliderInt("Brightness", &bri, 0, 100))
         s.histoGain = std::pow(10.0f, lg + (bri / 100.0f) * (hg - lg));
+    ImGui::Checkbox("Zoom to SDR white", &s.histoSdrWhiteZoom);
 }
 
 void HistogramScope::Shutdown() {

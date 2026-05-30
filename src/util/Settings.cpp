@@ -50,18 +50,21 @@ void Settings::Save() const {
     W(o, "bilinearDownsample", bilinearDownsample);
     W(o, "renderSupersample", renderSupersample);
     W(o, "sourceBlur", sourceBlur);
+    W(o, "blurExtents", blurExtents);
     W(o, "gratR", graticuleColor.x); W(o, "gratG", graticuleColor.y); W(o, "gratB", graticuleColor.z);
     W(o, "graticuleOpacity", graticuleOpacity);
     W(o, "colorize", colorize);
     W(o, "showHoverProbe", showHoverProbe);
     W(o, "hoverCircleRadius", hoverCircleRadius);
     W(o, "showHoverReadout", showHoverReadout);
+    W(o, "readoutBg", readoutBg);
     W(o, "showSdr8bit", showSdr8bit);
     W(o, "waveMode", waveMode);
     for (int i = 0; i < 3; ++i) { char k[32]; snprintf(k, 32, "chan%d", i); W(o, k, channelEnabled[i]); }
     W(o, "extents", extents);
     W(o, "extentsStyle", extentsStyle);
     W(o, "extentsSupersample", extentsSupersample);
+    W(o, "extentsOpacity", extentsOpacity);
     W(o, "gain", gain);
     W(o, "sdrWhiteZoom", sdrWhiteZoom);
     W(o, "lowPass", lowPass);
@@ -76,6 +79,7 @@ void Settings::Save() const {
     W(o, "histoMode", histoMode);
     W(o, "histoGain", histoGain);
     for (int i = 0; i < 3; ++i) { char k[32]; snprintf(k, 32, "histoChan%d", i); W(o, k, histoChannelEnabled[i]); }
+    W(o, "histoSdrWhiteZoom", histoSdrWhiteZoom);
     W(o, "vectorGain", vectorGain);
     W(o, "vectorShowSkin", vectorShowSkin);
     W(o, "vectorScale", vectorScale);
@@ -121,6 +125,7 @@ void Settings::Load() {
     bilinearDownsample = kv.getb("bilinearDownsample", bilinearDownsample);
     renderSupersample = kv.geti("renderSupersample", renderSupersample);
     sourceBlur = kv.getf("sourceBlur", sourceBlur);
+    blurExtents = kv.getb("blurExtents", blurExtents);
     graticuleColor.x = kv.getf("gratR", graticuleColor.x);
     graticuleColor.y = kv.getf("gratG", graticuleColor.y);
     graticuleColor.z = kv.getf("gratB", graticuleColor.z);
@@ -129,12 +134,14 @@ void Settings::Load() {
     showHoverProbe = kv.getb("showHoverProbe", showHoverProbe);
     hoverCircleRadius = kv.getf("hoverCircleRadius", hoverCircleRadius);
     showHoverReadout = kv.getb("showHoverReadout", showHoverReadout);
+    readoutBg = kv.getb("readoutBg", readoutBg);
     showSdr8bit = kv.getb("showSdr8bit", showSdr8bit);
     waveMode = kv.geti("waveMode", waveMode);
     for (int i = 0; i < 3; ++i) { char k[32]; snprintf(k, 32, "chan%d", i); channelEnabled[i] = kv.getb(k, channelEnabled[i]); }
     extents = kv.getb("extents", extents);
     extentsStyle = kv.geti("extentsStyle", extentsStyle);
     extentsSupersample = kv.getb("extentsSupersample", extentsSupersample);
+    extentsOpacity = kv.getf("extentsOpacity", extentsOpacity);
     gain = kv.getf("gain", gain);
     sdrWhiteZoom = kv.getb("sdrWhiteZoom", sdrWhiteZoom);
     lowPass = kv.getb("lowPass", lowPass);
@@ -153,6 +160,7 @@ void Settings::Load() {
     histoMode = kv.geti("histoMode", histoMode);
     histoGain = kv.getf("histoGain", histoGain);
     for (int i = 0; i < 3; ++i) { char k[32]; snprintf(k, 32, "histoChan%d", i); histoChannelEnabled[i] = kv.getb(k, histoChannelEnabled[i]); }
+    histoSdrWhiteZoom = kv.getb("histoSdrWhiteZoom", histoSdrWhiteZoom);
     vectorGain = kv.getf("vectorGain", vectorGain);
     vectorShowSkin = kv.getb("vectorShowSkin", vectorShowSkin);
     vectorScale = kv.getf("vectorScale", vectorScale);

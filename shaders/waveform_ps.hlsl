@@ -1,18 +1,20 @@
 // Waveform render-side resolve. Samples the uint bins texture, applies gain,
 // colorize, channel mask, the pan/zoom transform and the SDR-white vertical
 // axis scaling. Extents "points" style (0) is drawn here; the "white line"
-// style is drawn CPU-side as a polyline.
+// style is drawn CPU-side as a polyline. In luminance mode, colorize tints the
+// trace by the real source colour accumulated per cell (Resolve-style).
 
 cbuffer GraphCB : register(b0)
 {
     uint  gGraphCols, gBins, gChannels, gMode;   // mode 0=luma,1=rgb
     float gGain; uint gColorize; uint gExtentsPoints; uint gChanMask;
     float gUVScaleX, gUVScaleY, gUVOffX, gUVOffY;
-    float gYAxisTop01; uint gExtentCols; float gLowPassCols, _p1;
+    float gYAxisTop01; uint gExtentCols; float gExtentsOpacity, _p1;
 };
 
 Texture2D<uint> gBinsTex    : register(t0); // (gGraphCols, gBins * gChannels)
 Texture2D<uint> gExtentsTex : register(t1); // (gExtentCols, 2 * gChannels)
+Texture2D<uint> gColorTex   : register(t2); // (gGraphCols, gBins * 3) luma colour sums
 
 struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
 
@@ -55,28 +57,28 @@ float4 PSMain(VSOut i) : SV_Target
 
     float3 rgb = float3(0, 0, 0);
     uint chN = (gMode == 0) ? 1u : 3u;
-    int lpR = (int)gLowPassCols;
     for (uint ch = 0; ch < chN; ++ch) {
         if (gMode == 1 && !(gChanMask & (1u << ch))) continue;
-        uint count;
-        if (lpR >= 1) {
-            // Low-pass filter: average the trace across neighbouring columns.
-            float acc = 0;
-            for (int dc = -lpR; dc <= lpR; ++dc) {
-                int cc = clamp((int)col + dc, 0, (int)gGraphCols - 1);
-                acc += gBinsTex.Load(int3(cc, ch * gBins + bin, 0));
-            }
-            count = (uint)(acc / (2 * lpR + 1));
+        uint count = gBinsTex.Load(int3(col, ch * gBins + bin, 0));
+
+        float3 traceCol;
+        if (gMode == 0 && gColorize) {
+            // Average source colour accumulated at this cell (normalized, /1023).
+            float sr = gColorTex.Load(int3(col, 0 * gBins + bin, 0));
+            float sg = gColorTex.Load(int3(col, 1 * gBins + bin, 0));
+            float sb = gColorTex.Load(int3(col, 2 * gBins + bin, 0));
+            float n = max((float)count, 1.0);
+            traceCol = saturate(float3(sr, sg, sb) / (n * 1023.0));
         } else {
-            count = gBinsTex.Load(int3(col, ch * gBins + bin, 0));
+            traceCol = ChannelColor(ch);
         }
-        rgb += ChannelColor(ch) * Intensity(count);
+        rgb += traceCol * Intensity(count);
 
         if (gExtentsPoints) {
             uint lo = gExtentsTex.Load(int3(extCol, 2 * ch + 0, 0));
             uint hi = gExtentsTex.Load(int3(extCol, 2 * ch + 1, 0));
             if (lo <= hi && ((uint)bin == lo || (uint)bin == hi))
-                rgb += ChannelColor(ch) * 0.6;
+                rgb += ChannelColor(ch) * 0.6 * gExtentsOpacity;
         }
     }
     return float4(rgb, 1.0);

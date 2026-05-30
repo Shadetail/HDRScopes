@@ -6,8 +6,8 @@ namespace {
 struct CCB { UINT size, mode, sampleW, sampleH; UINT useBilinear, pa, pb, pc;
              INT cropX, cropY, cropW, cropH; UINT srcW, srcH, pd, pe;
              float minX, maxX, minY, maxY; float scale, sdrNorm, pg, ph; };
-struct GCB { UINT size, mode, colorize, p0; float gain, minX, maxX, minY;
-             float maxY, scale, uvScaleX, uvScaleY; float uvOffX, uvOffY, dotRadius, p2; };
+struct GCB { UINT size, mode, colorize, extents; float gain, minX, maxX, minY;
+             float maxY, scale, uvScaleX, uvScaleY; float uvOffX, uvOffY, dotRadius, extentsOpacity; };
 inline UINT DivUp(UINT a, UINT b) { return (a + b - 1) / b; }
 void SampleDims(Quality q, int cw, int ch, UINT& sw, UINT& sh) {
     auto cap = [](int v, int m) { return (UINT)std::min(std::max(v, 1), m); };
@@ -101,6 +101,8 @@ void ChromaScope::Render(UINT outW, UINT outH, const ScopeFrame& f, const Settin
         cb->uvScaleX = 1.0f / f.zoom; cb->uvScaleY = 1.0f / f.zoom;
         cb->uvOffX = f.panX; cb->uvOffY = f.panY;
         cb->dotRadius = (float)s.chromaDotRadius;
+        cb->extents = s.extents ? 1u : 0u;
+        cb->extentsOpacity = std::clamp(s.extentsOpacity, 0.0f, 1.0f);
         context_->Unmap(graphCB_.Get(), 0);
     }
     const float clear[4] = { 0, 0, 0, 1 };

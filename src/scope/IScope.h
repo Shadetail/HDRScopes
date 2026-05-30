@@ -9,7 +9,8 @@
 #include <d3d11.h>
 
 struct ScopeInput {
-    ID3D11ShaderResourceView* srcSRV = nullptr;
+    ID3D11ShaderResourceView* srcSRV = nullptr;  // possibly source-blurred
+    ID3D11ShaderResourceView* rawSRV = nullptr;  // unblurred original (for extents)
     UINT srcW = 0, srcH = 0;
     int  cropX = 0, cropY = 0, cropW = 0, cropH = 0;
     float sdrWhiteNits = 200.0f; // captured monitor's SDR white (for vectorscope normalize)

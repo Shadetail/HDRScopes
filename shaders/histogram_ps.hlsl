@@ -3,7 +3,7 @@
 cbuffer GCB : register(b0)
 {
     uint  gBins, gMode, gChanMask, gColorize;   // mode 0=LRGB rows,1=overlay,2=luma
-    float gGain; float gUVScaleX, gUVOffX, _pad;
+    float gGain; float gUVScaleX, gUVOffX, gXAxisTop01; // X top (PQ pos01) for SDR-white zoom
 };
 Texture2D<uint> gHist : register(t0); // (gBins, 4)
 
@@ -23,7 +23,8 @@ float4 PSMain(VSOut i) : SV_Target
 {
     float ux = gUVOffX + i.uv.x * gUVScaleX;
     if (ux < 0 || ux > 1) return float4(0, 0, 0, 1);
-    uint bin = (uint)(ux * (gBins - 1) + 0.5);
+    // Map display X into PQ position, optionally zoomed to the SDR-white range.
+    uint bin = min((uint)(ux * gXAxisTop01 * (gBins - 1) + 0.5), gBins - 1);
     float3 rgb = float3(0, 0, 0);
 
     if (gMode == 0) {
