@@ -91,6 +91,8 @@ void Settings::Save() const {
     W(o, "vectorColorize", vectorColorize);
     W(o, "vectorExtents", vectorExtents);
     W(o, "vectorExtentsOpacity", vectorExtentsOpacity);
+    W(o, "vectorPQ", vectorPQ);
+    W(o, "vectorSdrMarkers", vectorSdrMarkers);
     W(o, "cieDiagram", cieDiagram);
     W(o, "cieGain", cieGain);
     W(o, "cieShowRec2020", cieShowRec2020);
@@ -191,6 +193,8 @@ void Settings::Load() {
     vectorColorize = kv.getb("vectorColorize", oldColorize);
     vectorExtents = kv.getb("vectorExtents", oldExtents);
     vectorExtentsOpacity = kv.getf("vectorExtentsOpacity", oldExtOp);
+    vectorPQ = kv.getb("vectorPQ", vectorPQ);
+    vectorSdrMarkers = kv.getb("vectorSdrMarkers", vectorSdrMarkers);
     cieDiagram = kv.geti("cieDiagram", cieDiagram);
     cieGain = kv.getf("cieGain", cieGain);
     cieShowRec2020 = kv.getb("cieShowRec2020", cieShowRec2020);

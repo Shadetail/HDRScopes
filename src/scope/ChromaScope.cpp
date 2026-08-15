@@ -4,7 +4,7 @@
 #include <cmath>
 
 namespace {
-struct CCB { UINT size, mode, sampleW, sampleH; UINT useBilinear, pa, pb, pc;
+struct CCB { UINT size, mode, sampleW, sampleH; UINT useBilinear, vectorPQ, pb, pc;
              INT cropX, cropY, cropW, cropH; UINT srcW, srcH, pd, pe;
              float minX, maxX, minY, maxY; float scale, sdrNorm, pg, ph; };
 struct GCB { UINT size, mode, colorize, extents; float gain, minX, maxX, minY;
@@ -54,6 +54,7 @@ void ChromaScope::Compute(const ScopeInput& in, const Settings& s) {
         *cb = {};
         cb->size = size_; cb->mode = (UINT)r.mode; cb->sampleW = sw; cb->sampleH = sh;
         cb->useBilinear = s.bilinearDownsample ? 1u : 0u;
+        cb->vectorPQ = s.vectorPQ ? 1u : 0u;
         cb->cropX = in.cropX; cb->cropY = in.cropY; cb->cropW = in.cropW; cb->cropH = in.cropH;
         cb->srcW = in.srcW; cb->srcH = in.srcH;
         cb->minX = r.minX; cb->maxX = r.maxX; cb->minY = r.minY; cb->maxY = r.maxY;

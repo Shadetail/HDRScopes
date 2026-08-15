@@ -85,6 +85,8 @@ struct Settings {
     bool   vectorColorize = true;
     bool   vectorExtents = true;
     float  vectorExtentsOpacity = 1.0f;
+    bool   vectorPQ = true;           // encode PQ (absolute nits) instead of Rec.709 gamma
+    bool   vectorSdrMarkers = true;   // PQ mode: mark where 100% SDR primaries land
 
     // ---- CIE ----
     int    cieDiagram = 0;            // 0 = xy (1931), 1 = u'v' (1976)

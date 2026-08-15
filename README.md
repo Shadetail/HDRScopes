@@ -34,7 +34,8 @@ HDR, HDRScopes can put it on a scope — live, at ~110 FPS for a 4K capture.
   current Windows SDR-white level.
 - **Histogram** — pixel count per nit bin: stacked L/R/G/B bands, overlaid
   RGB, or luma only.
-- **Vectorscope** — ICtCp chroma with primary/secondary targets and a
+- **Vectorscope** — Y′CbCr chroma in your choice of PQ (HDR, absolute-nits)
+  or Rec.709 (SDR) encoding, with 75%/100% primary/secondary targets and a
   skin-tone line *(pictured: a BT.2020 saturation sweep)*.
 - **CIE Chromaticity** — 1931 xy or 1976 u′v′, with the spectral locus,
   Rec.709 / P3 / Rec.2020 gamut triangles, and the D65 white point.
@@ -81,8 +82,7 @@ but the captured values won't represent an HDR signal).
 ## Known limitations
 
 - No parade scope yet.
-- Vectorscope graticule target positions and the skin-tone line are
-  approximations.
+- The vectorscope skin-tone line angle is an approximation (configurable).
 - RGB undershoots below 0 nits clamp to the bottom of the waveform rather
   than rendering below the 0-line.
 - DRM-protected content (Netflix and friends) captures as black — that's

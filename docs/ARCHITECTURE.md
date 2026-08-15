@@ -50,7 +50,8 @@ startup).
 
 - Parade scope is not yet implemented (the picker entry currently maps to
   Waveform).
-- Vectorscope target positions / skin-tone line are approximations.
+- Vectorscope skin-tone line angle is an approximation (configurable);
+  target positions are exact (75%/100% amplitudes of the Y'CbCr matrix).
 - Sub-0 (undershoot) RGB excursions clamp to the bottom bin rather than
   rendering below the 0-line.
 - Protected/DRM content captures black; a region on an SDR output reads
