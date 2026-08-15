@@ -344,8 +344,10 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
         dl->PushClipRect(f.graphP0, f.graphP1, true);
         dl->AddLine(ImVec2(left, y), ImVec2(right, y), col, std::max(1.0f, s.refLineThickness));
         dl->PopClipRect();
+        // Label sits inside the plot at the left edge, matching the graticule
+        // labels' side (those live outside; keeping this inside avoids overlap).
         char lab[32]; snprintf(lab, sizeof(lab), "%.0f", s.refLines[i].nits);
-        dl->AddText(ImVec2(right - 50.0f, y - 14.0f), col, lab);
+        dl->AddText(ImVec2(left + 6.0f, y - 14.0f), col, lab);
 
         if (hovered && io.MouseClicked[0] && fabsf(io.MousePos.y - y) < 5.0f) draggingRef_ = (int)i;
     }
@@ -392,9 +394,12 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
 
 void WaveformScope::DrawControls(Settings& s) {
     ImGui::RadioButton("Luminance", &s.waveMode, 0);
-    UiReset(s.waveMode, UiDefaults().waveMode); ImGui::SameLine();
+    UiReset(s.waveMode, UiDefaults().waveMode);
+    UiTip("One trace of overall brightness (luminance) per column."); ImGui::SameLine();
     ImGui::RadioButton("RGB", &s.waveMode, 1);
     UiReset(s.waveMode, UiDefaults().waveMode);
+    UiTip("Separate red, green and blue traces, overlaid; toggle channels with the "
+          "squares below.");
 
     if (s.waveMode == 1) {
         // DaVinci-style R G B toggle squares.
@@ -415,8 +420,12 @@ void WaveformScope::DrawControls(Settings& s) {
 
     ImGui::Checkbox("Colorize", &s.waveColorize);
     UiReset(s.waveColorize, UiDefaults().waveColorize);
+    UiTip("Tint the trace with the source pixels' actual colors instead of drawing "
+          "it monochrome.");
     ImGui::Checkbox("Extents", &s.waveExtents);
     UiReset(s.waveExtents, UiDefaults().waveExtents);
+    UiTip("Always show each column's true minimum and maximum, even where the main "
+          "trace is too faint to see - as colored points or a thin envelope line.");
     if (s.waveExtents) {
         ImGui::SameLine();
         ImGui::SetNextItemWidth(150);
@@ -428,6 +437,8 @@ void WaveformScope::DrawControls(Settings& s) {
         if (!s.perPixelQuality()) {
             ImGui::Checkbox("Supersample extents", &s.waveExtentsSupersample);
             UiReset(s.waveExtentsSupersample, UiDefaults().waveExtentsSupersample);
+            UiTip("Read every source pixel for the extents even when Quality samples "
+                  "a coarser grid, so single-pixel peaks can't slip through.");
         }
         ImGui::SetNextItemWidth(150);
         ImGui::SliderFloat("Extents opacity", &s.waveExtentsOpacity, 0.0f, 1.0f, "%.2f");
@@ -435,10 +446,16 @@ void WaveformScope::DrawControls(Settings& s) {
     }
     ImGui::SliderFloat("Brightness", &s.gain, 0.001f, 0.5f, "%.3f", ImGuiSliderFlags_Logarithmic);
     UiReset(s.gain, UiDefaults().gain);
+    UiTip("How much each pixel hit brightens the trace (log scale). Raise it for "
+          "small or dark sources, lower it for busy full-screen content.");
     ImGui::Checkbox("Zoom Y to SDR white", &s.sdrWhiteZoom);
     UiReset(s.sdrWhiteZoom, UiDefaults().sdrWhiteZoom);
+    UiTip("Rescale the vertical axis so its top is the current Windows SDR-white "
+          "level instead of 10,000 nits - an SDR-range view of the signal.");
     ImGui::Checkbox("Low pass filter", &s.lowPass);
     UiReset(s.lowPass, UiDefaults().lowPass);
+    UiTip("Smooth the trace across neighboring columns (Resolve-style low pass): "
+          "exposure bands become easier to read, single-column spikes fade.");
     if (s.lowPass) {
         ImGui::SameLine(); ImGui::SetNextItemWidth(120);
         ImGui::SliderFloat("Strength##lpa", &s.lowPassAmount, 0.0f, 1.0f, "%.2f");
@@ -460,6 +477,7 @@ void WaveformScope::DrawControls(Settings& s) {
         const RefLine defaultRef = i < defaults.refLines.size() ? defaults.refLines[i] : RefLine{};
         ImGui::Checkbox("##en", &s.refLines[i].enabled);
         UiReset(s.refLines[i].enabled, defaultRef.enabled);
+        UiTip("Show this reference line on the waveform.");
         ImGui::SameLine();
         float v = (float)s.refLines[i].nits;
         float speed = io.KeyShift ? 0.02f : 0.5f; // hold Shift for 10x-finer control
@@ -467,6 +485,8 @@ void WaveformScope::DrawControls(Settings& s) {
         if (ImGui::DragFloat("nits", &v, speed, 0.0f, 10000.0f, "%.2f", ImGuiSliderFlags_Logarithmic))
             s.refLines[i].nits = std::clamp((double)v, 0.0, 10000.0);
         UiReset(s.refLines[i].nits, defaultRef.nits);
+        UiTip("The line's nit level. Drag here (hold Shift for 10x finer steps) or "
+              "drag the line itself on the waveform.");
         ImGui::SameLine();
         if (ImGui::SmallButton("x")) { s.refLines.erase(s.refLines.begin() + i); ImGui::PopID(); break; }
         ImGui::PopID();

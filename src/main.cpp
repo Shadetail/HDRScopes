@@ -93,6 +93,7 @@ static void DrawControlsWindow(float btnX, float btnY) {
     // Appear just under the Controls button (right-aligned to it) each time it opens.
     ImGui::SetNextWindowPos(ImVec2(btnX + 60.0f - w, btnY), ImGuiCond_Appearing);
     if (!ImGui::Begin("Controls", &g_showControls)) { ImGui::End(); return; }
+    UiTipsEnabled() = g_set.showTooltips;
 
     // Warm amber for the category headers/expanders — distinct from the blue
     // input widgets so section titles read clearly instead of blending in.
@@ -118,8 +119,10 @@ static void DrawControlsWindow(float btnX, float btnY) {
         ImGui::Text("SDR white: %.0f nits", g_sdrWhiteNits);
 
         ImGui::RadioButton("Full", &g_set.regionMode, 0); ImGui::SameLine();
-        ImGui::RadioButton("Window", &g_set.regionMode, 1); ImGui::SameLine();
+        ImGui::RadioButton("Window", &g_set.regionMode, 1);
+        UiTip("Scope a single window: arm the picker below, then hover the target window."); ImGui::SameLine();
         ImGui::RadioButton("Rect", &g_set.regionMode, 2);
+        UiTip("Scope a fixed screen rectangle: drag one with the button below, or type desktop coordinates.");
         if (ImGui::Button("Select region on screen (drag)")) {
             RECT outRect = g_capture.DesktopRect();
             if (outRect.right <= outRect.left) outRect = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
@@ -143,6 +146,7 @@ static void DrawControlsWindow(float btnX, float btnY) {
         } else if (g_set.regionMode == 2) {
             ImGui::SetNextItemWidth(220);
             ImGui::InputInt4("L,T,W,H", g_set.dragRect);
+            UiTip("The captured rectangle in desktop coordinates: left, top, width, height.");
         }
     }
 
@@ -156,6 +160,9 @@ static void DrawControlsWindow(float btnX, float btnY) {
         if (ImGui::SliderFloat("Quality", &g_set.qualityDownsample, 1.0f, 8.0f, qfmt, ImGuiSliderFlags_Logarithmic))
             g_set.qualityDownsample = std::clamp(g_set.qualityDownsample, 1.0f, 8.0f);
         UiReset(g_set.qualityDownsample, UiDefaults().qualityDownsample);
+        UiTip("How densely the source is sampled. Per pixel reads every captured pixel; "
+              "lower quality samples a coarser grid - much cheaper on weak GPUs, at the "
+              "cost of missing isolated single-pixel values.");
         if (!g_set.perPixelQuality() && g_lastCropW > 0) {
             ImGui::SameLine();
             ImGui::TextDisabled("%dx%d", std::max(1, (int)std::lround(g_lastCropW / g_set.qualityDownsample)),
@@ -164,46 +171,75 @@ static void DrawControlsWindow(float btnX, float btnY) {
         if (!g_set.perPixelQuality()) { // sampling is 1:1 at per-pixel, filter is a no-op
             ImGui::Checkbox("Bilinear source downsample", &g_set.bilinearDownsample);
             UiReset(g_set.bilinearDownsample, UiDefaults().bilinearDownsample);
+            UiTip("Average neighboring pixels when sampling below per-pixel quality, "
+                  "instead of picking one. Suppresses sampling noise, but blends values "
+                  "so outliers read slightly softer.");
         }
         const char* ss[] = { "Off", "2x", "4x" };
         int ssi = g_set.renderSupersample <= 1 ? 0 : (g_set.renderSupersample >= 4 ? 2 : 1);
         ImGui::SetNextItemWidth(160);
         if (ImGui::Combo("Anti-alias (supersample)", &ssi, ss, 3)) g_set.renderSupersample = ssi == 0 ? 1 : (ssi == 1 ? 2 : 4);
         UiReset(g_set.renderSupersample, UiDefaults().renderSupersample);
+        UiTip("Render the scope graphics at 2x/4x resolution and downscale - smoother "
+              "traces and graticule lines for a bit more GPU work.");
         ImGui::SetNextItemWidth(160);
         ImGui::SliderFloat("Source blur", &g_set.sourceBlur, 0.0f, 8.0f, "%.1f px");
         UiReset(g_set.sourceBlur, UiDefaults().sourceBlur);
+        UiTip("Gaussian-blur the capture before it reaches the scopes, so dither and "
+              "single-pixel noise stop registering and the traces show the underlying "
+              "levels. Radius in source pixels.");
         if (g_set.sourceBlur > 0.05f) {
             ImGui::Checkbox("Blur affects waveform extents", &g_set.blurExtents);
             UiReset(g_set.blurExtents, UiDefaults().blurExtents);
+            UiTip("Feed the blurred image to the waveform extents trace too. Off = "
+                  "extents keep reading the sharp source, so true single-pixel peaks "
+                  "stay visible while the main trace is smoothed.");
         }
         ImGui::Checkbox("Show FPS", &g_set.showFps);
         UiReset(g_set.showFps, UiDefaults().showFps);
         ImGui::SetNextItemWidth(160);
         ImGui::SliderInt("FPS limit (0=vsync)", &g_set.fpsLimit, 0, 240);
         UiReset(g_set.fpsLimit, UiDefaults().fpsLimit);
+        UiTip("Cap how often the scopes update, to spend less GPU. 0 = sync to the "
+              "monitor's refresh rate.");
         ImGui::Checkbox("UI follows Windows SDR white", &g_set.uiFollowSdrWhite);
         UiReset(g_set.uiFollowSdrWhite, UiDefaults().uiFollowSdrWhite);
+        UiTip("Draw the interface at the brightness set by the Windows SDR-white "
+              "slider, matching other desktop apps. The scope traces are unaffected - "
+              "they always keep their true HDR brightness.");
         ImGui::Checkbox("Hover probe markers", &g_set.showHoverProbe);
         UiReset(g_set.showHoverProbe, UiDefaults().showHoverProbe);
+        UiTip("Mark where the pixel under your mouse lands on each scope: a white "
+              "circle for luminance and R/G/B circles for the channels. Works while "
+              "hovering anywhere on the captured screen area.");
         ImGui::SameLine(); ImGui::SetNextItemWidth(70);
         ImGui::SliderFloat("Size", &g_set.hoverCircleRadius, 3.0f, 24.0f, "%.0f");
         UiReset(g_set.hoverCircleRadius, UiDefaults().hoverCircleRadius);
         ImGui::Checkbox("Hover/peak readout (top)", &g_set.showHoverReadout);
         UiReset(g_set.showHoverReadout, UiDefaults().showHoverReadout);
+        UiTip("The numbers top-center: the hovered pixel's luminance and R/G/B in "
+              "nits, or the frame's peak values when nothing is hovered.");
         ImGui::SameLine(); ImGui::Checkbox("8-bit SDR", &g_set.showSdr8bit);
         UiReset(g_set.showSdr8bit, UiDefaults().showSdr8bit);
+        UiTip("Also show the readout values as 8-bit SDR code levels (0-255) relative "
+              "to the current SDR white; anything brighter reads 255+.");
         if (g_set.showHoverReadout) {
             ImGui::Checkbox("Readout background", &g_set.readoutBg);
             UiReset(g_set.readoutBg, UiDefaults().readoutBg);
+            UiTip("Draw a translucent dark box behind the top readout so it stays "
+                  "legible over bright scope content.");
         }
         ImGui::Checkbox("Nit value at cursor", &g_set.showCursorNits);
         UiReset(g_set.showCursorNits, UiDefaults().showCursorNits);
+        UiTip("Attach a small nit label to the mouse cursor while hovering the "
+              "waveform or histogram, reading the axis value at that position.");
     }
 
     if (ImGui::CollapsingHeader("Graticule", ImGuiTreeNodeFlags_DefaultOpen)) {
         // (no right-click reset on the swatch: ColorEdit owns that gesture)
         ImGui::ColorEdit3("Color", &g_set.graticuleColor.x, ImGuiColorEditFlags_NoInputs);
+        UiTip("The graticule is the measurement scale drawn over the scopes - axis "
+              "lines, ticks and labels.");
         ImGui::SliderFloat("Opacity", &g_set.graticuleOpacity, 0.0f, 1.0f);
         UiReset(g_set.graticuleOpacity, UiDefaults().graticuleOpacity);
     }
@@ -220,10 +256,9 @@ static void DrawControlsWindow(float btnX, float btnY) {
         ImGui::PopID();
     }
 
-    if (ImGui::CollapsingHeader("Debug")) {
-        ImGui::Checkbox("Show test pattern source", &g_set.debugShowTestPattern);
-        if (g_set.debugShowTestPattern) ImGui::Checkbox("Use test pattern", &g_set.useTestPattern);
-        else g_set.useTestPattern = false;
+    if (ImGui::CollapsingHeader("Preferences")) {
+        ImGui::Checkbox("Show tooltips", &g_set.showTooltips);
+        UiReset(g_set.showTooltips, UiDefaults().showTooltips);
 
         if (ImGui::Button("Reset all settings to default")) {
             // Keep the window placement; reset everything else to defaults.
@@ -235,6 +270,14 @@ static void DrawControlsWindow(float btnX, float btnY) {
         ImGui::PushTextWrapPos(0.0f);
         ImGui::TextDisabled("Tip: right-click any individual setting to reset just that one to its default.");
         ImGui::PopTextWrapPos();
+    }
+
+    if (ImGui::CollapsingHeader("Debug")) {
+        ImGui::Checkbox("Show test pattern source", &g_set.debugShowTestPattern);
+        UiTip("Expose a built-in synthetic test source (color sweeps and level steps) "
+              "as a capture input - for checking the scopes themselves.");
+        if (g_set.debugShowTestPattern) ImGui::Checkbox("Use test pattern", &g_set.useTestPattern);
+        else g_set.useTestPattern = false;
     }
 
     ImGui::PopStyleColor(3);
@@ -363,6 +406,12 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
     IMGUI_CHECKVERSION(); ImGui::CreateContext();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     ImGui::GetIO().IniFilename = nullptr;
+    // Tooltips only appear once the mouse has been parked on a control for a
+    // moment, so they never flash by during ordinary use.
+    ImGui::GetStyle().HoverFlagsForTooltipMouse =
+        ImGuiHoveredFlags_Stationary | ImGuiHoveredFlags_DelayNormal;
+    ImGui::GetStyle().HoverDelayNormal = 0.55f;
+    ImGui::GetStyle().HoverStationaryDelay = 0.25f;
     ImGui::StyleColorsDark();
     ImGui_ImplWin32_Init(hwnd); ImGui_ImplDX11_Init(g_d3d.Device(), g_d3d.Context());
 

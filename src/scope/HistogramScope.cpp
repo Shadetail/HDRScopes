@@ -184,6 +184,8 @@ void HistogramScope::DrawControls(Settings& s) {
     const char* modes[] = { "LRGB rows", "Overlay RGB", "Luma" };
     ImGui::SetNextItemWidth(160); ImGui::Combo("Mode", &s.histoMode, modes, 3);
     UiReset(s.histoMode, UiDefaults().histoMode);
+    UiTip("LRGB rows: four stacked bands (luma, R, G, B). Overlay RGB: the channels "
+          "drawn over each other in one band. Luma: a single luminance band.");
     if (s.histoMode == 1) {
         const char* names[3] = { "R", "G", "B" };
         const ImVec4 onCol[3] = { {0.9f,0.2f,0.2f,1}, {0.2f,0.85f,0.2f,1}, {0.3f,0.5f,1.0f,1} };
@@ -200,6 +202,7 @@ void HistogramScope::DrawControls(Settings& s) {
     if (s.histoMode == 1) {
         ImGui::Checkbox("Colorize", &s.histoColorize);
         UiReset(s.histoColorize, UiDefaults().histoColorize);
+        UiTip("Draw each overlaid channel in its own color instead of monochrome.");
     }
     // Friendly 0..100 brightness, log-mapped to gain (wide range, low default).
     const float gmin = 2e-6f, gmax = 1e-3f;
@@ -210,8 +213,12 @@ void HistogramScope::DrawControls(Settings& s) {
     if (ImGui::SliderInt("Brightness", &bri, 0, 100))
         s.histoGain = std::pow(10.0f, lg + (bri / 100.0f) * (hg - lg));
     UiReset(s.histoGain, UiDefaults().histoGain);
+    UiTip("How strongly pixel counts light up the plot (log scale). Raise it to see "
+          "rare values, lower it if common values bloom.");
     ImGui::Checkbox("Zoom to SDR white", &s.histoSdrWhiteZoom);
     UiReset(s.histoSdrWhiteZoom, UiDefaults().histoSdrWhiteZoom);
+    UiTip("Rescale the nit axis so it ends at the current Windows SDR-white level "
+          "instead of 10,000 nits - an SDR-range view of the signal.");
 }
 
 void HistogramScope::Shutdown() {

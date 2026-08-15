@@ -40,6 +40,7 @@ void Settings::Save() const {
     W(o, "showFps", showFps);
     W(o, "fpsLimit", fpsLimit);
     W(o, "uiFollowSdrWhite", uiFollowSdrWhite);
+    W(o, "showTooltips", showTooltips);
     W(o, "debugShowTestPattern", debugShowTestPattern);
     W(o, "useTestPattern", useTestPattern);
     W(o, "outputIndex", outputIndex);
@@ -126,6 +127,7 @@ void Settings::Load() {
     showFps = kv.getb("showFps", showFps);
     fpsLimit = kv.geti("fpsLimit", fpsLimit);
     uiFollowSdrWhite = kv.getb("uiFollowSdrWhite", uiFollowSdrWhite);
+    showTooltips = kv.getb("showTooltips", showTooltips);
     debugShowTestPattern = kv.getb("debugShowTestPattern", debugShowTestPattern);
     useTestPattern = kv.getb("useTestPattern", useTestPattern);
     outputIndex = kv.geti("outputIndex", outputIndex);

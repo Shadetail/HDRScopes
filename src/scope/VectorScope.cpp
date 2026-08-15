@@ -99,20 +99,36 @@ void VectorScope::DrawControls(Settings& s) {
     int enc = s.vectorPQ ? 1 : 0;
     if (ImGui::Combo("Encoding", &enc, "Rec.709 (SDR)\0PQ (HDR)\0")) s.vectorPQ = (enc == 1);
     UiReset(s.vectorPQ, UiDefaults().vectorPQ);
+    UiTip("How pixels are encoded before the Y'CbCr chroma plot. PQ (HDR) works in "
+          "absolute nits - right for HDR signals. Rec.709 (SDR) matches a classic "
+          "SDR vectorscope.");
     if (s.vectorPQ) {
         ImGui::Checkbox("SDR primary markers", &s.vectorSdrMarkers);
         UiReset(s.vectorSdrMarkers, UiDefaults().vectorSdrMarkers);
+        UiTip("Small markers showing where fully saturated SDR primaries and "
+              "secondaries land at the current SDR-white level - an orientation aid "
+              "(nonstandard), well inside the fixed 75%/100% targets.");
     }
     ImGui::SliderFloat("Brightness", &s.vectorGain, 0.00005f, 1.0f, "%.5f", ImGuiSliderFlags_Logarithmic);
     UiReset(s.vectorGain, UiDefaults().vectorGain);
+    UiTip("How much each pixel hit brightens the plot (log scale). Raise it for "
+          "small or dark sources, lower it for busy content.");
     ImGui::SliderFloat("Scale", &s.vectorScale, 0.06f, 1.0f, "%.2f");
     UiReset(s.vectorScale, UiDefaults().vectorScale);
+    UiTip("Magnification of the chroma plane - the trace and the graticule targets "
+          "scale together.");
     ImGui::Checkbox("Colorize", &s.vectorColorize);
     UiReset(s.vectorColorize, UiDefaults().vectorColorize);
+    UiTip("Tint the plot with the source pixels' actual colors instead of drawing "
+          "it monochrome.");
     ImGui::SliderInt("Dot size", &s.chromaDotRadius, 0, 6);
     UiReset(s.chromaDotRadius, UiDefaults().chromaDotRadius);
+    UiTip("Thicken each plotted point by this many pixels - makes sparse traces "
+          "easier to see (shared with the CIE scope).");
     ImGui::Checkbox("Extents (gamut outline)", &s.vectorExtents);
     UiReset(s.vectorExtents, UiDefaults().vectorExtents);
+    UiTip("Outline the outermost chroma excursions - the source's actual color "
+          "footprint - even where the trace is too faint to see.");
     if (s.vectorExtents) {
         ImGui::SameLine(); ImGui::SetNextItemWidth(110);
         ImGui::SliderFloat("##exop", &s.vectorExtentsOpacity, 0.0f, 1.0f, "opacity %.2f");
@@ -120,8 +136,13 @@ void VectorScope::DrawControls(Settings& s) {
     }
     ImGui::Checkbox("Skin tone line", &s.vectorShowSkin);
     UiReset(s.vectorShowSkin, UiDefaults().vectorShowSkin);
+    UiTip("Reference line along the classic skin-tone hue (the \"I-line\"): skin of "
+          "all complexions clusters along it, varying far more in saturation than "
+          "in hue.");
     if (s.vectorShowSkin) {
         ImGui::SliderFloat("Skin angle", &s.vectorSkinAngleDeg, 90.0f, 160.0f, "%.1f deg");
         UiReset(s.vectorSkinAngleDeg, UiDefaults().vectorSkinAngleDeg);
+        UiTip("Angle of the skin-tone line. No exact standard exists and tools "
+              "disagree slightly, so it's adjustable.");
     }
 }

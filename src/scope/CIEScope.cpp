@@ -87,14 +87,24 @@ void CIEScope::DrawControls(Settings& s) {
     const char* diags[] = { "xy (1931)", "u'v' (1976)" };
     ImGui::SetNextItemWidth(150); ImGui::Combo("Diagram", &s.cieDiagram, diags, 2);
     UiReset(s.cieDiagram, UiDefaults().cieDiagram);
+    UiTip("xy (1931) is the classic horseshoe diagram; u'v' (1976) spaces colors "
+          "more perceptually evenly.");
     ImGui::SliderFloat("Brightness", &s.cieGain, 0.00005f, 1.0f, "%.5f", ImGuiSliderFlags_Logarithmic);
     UiReset(s.cieGain, UiDefaults().cieGain);
+    UiTip("How much each pixel hit brightens the plot (log scale). Raise it for "
+          "small or dark sources, lower it for busy content.");
     ImGui::Checkbox("Colorize", &s.cieColorize);
     UiReset(s.cieColorize, UiDefaults().cieColorize);
+    UiTip("Tint the plot with the source pixels' actual colors instead of drawing "
+          "it monochrome.");
     ImGui::SliderInt("Dot size", &s.chromaDotRadius, 0, 6);
     UiReset(s.chromaDotRadius, UiDefaults().chromaDotRadius);
+    UiTip("Thicken each plotted point by this many pixels - makes sparse traces "
+          "easier to see (shared with the vectorscope).");
     ImGui::Checkbox("Extents (gamut outline)", &s.cieExtents);
     UiReset(s.cieExtents, UiDefaults().cieExtents);
+    UiTip("Outline the outermost chromaticity excursions - the source's actual "
+          "gamut footprint - even where the trace is too faint to see.");
     if (s.cieExtents) {
         ImGui::SameLine(); ImGui::SetNextItemWidth(110);
         ImGui::SliderFloat("##exop", &s.cieExtentsOpacity, 0.0f, 1.0f, "opacity %.2f");

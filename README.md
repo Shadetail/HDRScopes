@@ -67,7 +67,8 @@ need that.
 
 - **Controls** (top-right button) opens the settings popup: capture source
   (monitor / window / dragged screen region), quality, and per-panel scope
-  options.
+  options. Rest the mouse on any control for an explanation (tooltips can be
+  turned off under Preferences); right-click any control to reset just it.
 - **Layouts** — the `1 / 2 / 4` buttons switch layout presets; each panel has
   a scope picker.
 - **Navigate** — mouse-wheel zoom (to cursor), middle-drag pan, click the
