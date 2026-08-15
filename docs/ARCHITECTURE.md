@@ -54,8 +54,10 @@ startup).
   target positions are exact (75%/100% amplitudes of the Y'CbCr matrix).
 - Sub-0 (undershoot) RGB excursions clamp to the bottom bin rather than
   rendering below the 0-line.
-- Protected/DRM content captures black; a region on an SDR output reads
-  meaningless — both documented-as-acceptable.
+- Protected/DRM content captures black — documented-as-acceptable.
+- SDR signals (SDR desktop, or SDR content on an HDR desktop) read as the
+  0–80-nit reference range; supported and documented. Graticule nit labels
+  don't switch to SDR-relative values (add if requested).
 
 ## Releasing
 

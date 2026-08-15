@@ -14,8 +14,9 @@ Traditional scopes live inside an NLE and only see that app's own timeline.
 HDRScopes instead captures the Windows desktop itself (DXGI Desktop
 Duplication, scRGB FP16 — the real composited HDR signal), so it can measure
 what nothing else can: games, video players, YouTube in a browser, your own
-code, another grading app, or the desktop as a whole. If Windows draws it in
-HDR, HDRScopes can put it on a scope — live, at ~110 FPS for a 4K capture.
+code, another grading app such as Unreal Engine or Lightroom / Adobe Camera
+Raw, or simply the desktop as a whole. If Windows draws it in HDR, HDRScopes
+can put it on a scope — live, at ~110 FPS for a 4K capture.
 
 <!-- HERO SHOT (Mario): full window, waveform on pretty HDR content with
      specular peaks punching above a reference line. Save as docs/img/hero.png
@@ -25,7 +26,7 @@ HDR, HDRScopes can put it on a scope — live, at ~110 FPS for a 4K capture.
 
 ## Scopes
 
-<img align="right" width="300" src="docs/img/vectorscope.png" alt="ICtCp vectorscope, BT.2020 sweep">
+<img align="right" width="300" src="docs/img/vectorscope.png" alt="Vectorscope, BT.2020 sweep">
 
 - **Waveform** — per-column PQ-nit histogram over a fixed 0–10,000 nit log
   axis. Luminance or RGB mode, optional colorize, extents display (colored
@@ -51,14 +52,14 @@ Grab the latest zip from **[Releases](https://github.com/Shadetail/HDRScopes/rel
 unzip anywhere, run `HDRScopes.exe`. No installer, no dependencies, no
 telemetry. Settings persist to `%LOCALAPPDATA%\HDRScopes\settings.ini`.
 
-> **SmartScreen note:** Windows may warn on first launch because the exe is
-> new and unsigned (normal for small open-source tools). *More info → Run
-> anyway.* If you'd rather not trust a prebuilt exe, building from source
-> takes two commands — see below.
-
 **Requirements:** Windows 10 (1809+) or Windows 11 · any DX11-capable GPU ·
-an HDR-enabled display for meaningful readings (the app runs on SDR outputs,
-but the captured values won't represent an HDR signal).
+HDR or SDR output. SDR signals (an SDR desktop, or SDR content on an HDR
+desktop — same thing to the capture) are read the HDR-compatible way, as the
+0–80-nit reference range, and the scopes fully support working there: the
+waveform supports an SDR-white zoom, the hover readout shows 8-bit SDR
+values, and the vectorscope supports Rec.709 (SDR) encoding. The one thing
+missing is SDR-relative nit labels on the graticules — ask in Issues if you
+need that.
 
 ## Usage
 
@@ -81,8 +82,12 @@ but the captured values won't represent an HDR signal).
 
 ## Known limitations
 
-- No parade scope yet.
-- The vectorscope skin-tone line angle is an approximation (configurable).
+- No parade scope yet, as I never personally found it useful — but I can add
+  it if someone wants it.
+- The vectorscope skin-tone line follows the classic "I-line" convention, for
+  which no exact standard exists — tools disagree slightly on its angle, so
+  ours is configurable (skin tones of all complexions naturally cluster along
+  this line, varying in saturation far more than in hue).
 - RGB undershoots below 0 nits clamp to the bottom of the waveform rather
   than rendering below the 0-line.
 - DRM-protected content (Netflix and friends) captures as black — that's
