@@ -17,6 +17,10 @@ protected:
     struct PlotRange { int mode; float minX, maxX, minY, maxY, scale; };
     virtual PlotRange Range(const Settings&) const = 0;
     virtual float Gain(const Settings&) const = 0;
+    // Per-scope-type look settings (vector and CIE each have their own).
+    virtual bool  ShowExtents(const Settings&) const = 0;
+    virtual float ExtentsOpacity(const Settings&) const = 0;
+    virtual bool  Colorized(const Settings&) const = 0;
 
     bool EnsureRT(UINT w, UINT h);
 

@@ -74,6 +74,46 @@ void AddExtent(uint extCol, uint ch, int bin)
     InterlockedMax(gExtentsRW[uint2(extCol, 2 * ch + 1)], (uint)bin);
 }
 
+// Supersampled extents: when gExtentCols exceeds the sample grid width, a
+// second dispatch runs this at one thread per EXTENT column so the envelope
+// really is sampled at full column resolution (CSHistogram alone can only
+// populate gSampleW distinct columns). Mirrors CSHistogram's extents source
+// selection (raw vs blurred+low-passed).
+[numthreads(8, 8, 1)]
+void CSExtents(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= gExtentCols || id.y >= gSampleH) return;
+
+    float u = (id.x + 0.5) / gExtentCols;
+    float v = (id.y + 0.5) / gSampleH;
+
+    float3 cExt;
+    if (gBlurExtents == 0u) {
+        cExt = Clamp_scRGB(SampleAt(gSourceRaw, u, v));
+    } else {
+        float3 c = SampleAt(gSource, u, v);
+        if (gLowPassRadius > 0u) {
+            float3 acc = c; float wsum = 1.0;
+            for (uint k = 1; k <= gLowPassRadius; ++k) {
+                float du = (float)k / gSampleW;
+                acc += SampleAt(gSource, u - du, v);
+                acc += SampleAt(gSource, u + du, v);
+                wsum += 2.0;
+            }
+            c = acc / wsum;
+        }
+        cExt = Clamp_scRGB(c);
+    }
+
+    if (gMode == 0) {
+        AddExtent(id.x, 0, ValueToBin(ScrgbLuminance(cExt)));
+    } else {
+        AddExtent(id.x, 0, ValueToBin(cExt.r));
+        AddExtent(id.x, 1, ValueToBin(cExt.g));
+        AddExtent(id.x, 2, ValueToBin(cExt.b));
+    }
+}
+
 [numthreads(8, 8, 1)]
 void CSHistogram(uint3 id : SV_DispatchThreadID)
 {

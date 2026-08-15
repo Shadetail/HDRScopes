@@ -1,6 +1,8 @@
 #include "scope/WaveformScope.h"
 #include "util/ShaderCompiler.h"
 #include "util/PQ.h"
+#include "util/Format.h"
+#include "util/UiReset.h"
 #include <algorithm>
 #include <cmath>
 
@@ -25,9 +27,10 @@ bool WaveformScope::Init(ID3D11Device* dev) {
     device_->GetImmediateContext(&context_);
     csClearExt_ = shader::MakeCompute(dev, L"waveform_cs.hlsl", "CSClearExtents");
     csHisto_    = shader::MakeCompute(dev, L"waveform_cs.hlsl", "CSHistogram");
+    csExtents_  = shader::MakeCompute(dev, L"waveform_cs.hlsl", "CSExtents");
     vs_ = shader::MakeVertex(dev, L"waveform_ps.hlsl", "VSMain");
     ps_ = shader::MakePixel (dev, L"waveform_ps.hlsl", "PSMain");
-    if (!csClearExt_ || !csHisto_ || !vs_ || !ps_) return false;
+    if (!csClearExt_ || !csHisto_ || !csExtents_ || !vs_ || !ps_) return false;
 
     auto mkCB = [&](UINT sz, ComPtr<ID3D11Buffer>& b) {
         D3D11_BUFFER_DESC bd = {};
@@ -52,15 +55,13 @@ Margins WaveformScope::GetMargins(const Settings&) const {
 void WaveformScope::DimsFor(const Settings& s, int cropW, int cropH,
                             UINT& graphCols, UINT& bins, UINT& sampleW, UINT& sampleH, UINT& extCols) {
     cropW = std::max(cropW, 1); cropH = std::max(cropH, 1);
-    auto cap = [](int v, int m) { return (UINT)std::min(v, m); };
-    switch (s.quality) {
-    case Quality::Low:    graphCols = 256;  bins = 512;  sampleW = cap(cropW, 960);  sampleH = cap(cropH, 540);  break;
-    case Quality::Medium: graphCols = 512;  bins = 768;  sampleW = cap(cropW, 1440); sampleH = cap(cropH, 810);  break;
-    case Quality::High:   graphCols = 1024; bins = 1024; sampleW = cap(cropW, 1920); sampleH = cap(cropH, 1080); break;
-    case Quality::Ultra:  graphCols = 1920; bins = 1080; sampleW = (UINT)cropW;       sampleH = (UINT)cropH;       break;
-    case Quality::PerPixel: graphCols = cap(cropW, 3840); bins = 1080; sampleW = (UINT)cropW; sampleH = (UINT)cropH; break;
-    }
-    extCols = s.extentsSupersample ? cap(cropW, 3840) : graphCols;
+    // Continuous quality: sample the source at 1/f resolution (f = 1 → per pixel).
+    float f = std::clamp(s.qualityDownsample, 1.0f, 16.0f);
+    sampleW = (UINT)std::max(1l, std::lround(cropW / f));
+    sampleH = (UINT)std::max(1l, std::lround(cropH / f));
+    bins = 1080;
+    graphCols = std::min(sampleW, 3840u);
+    extCols = s.waveExtentsSupersample ? (UINT)std::min(cropW, 3840) : graphCols;
 }
 
 bool WaveformScope::EnsureBins(UINT graphCols, UINT bins, UINT channels, UINT extCols) {
@@ -143,13 +144,20 @@ void WaveformScope::Compute(const ScopeInput& in, const Settings& s) {
     context_->CSSetShader(csHisto_.Get(), nullptr, 0);
     context_->Dispatch(DivUp(sampleW, 8), DivUp(sampleH, 8), 1);
 
+    // CSHistogram can only populate sampleW distinct extent columns; when the
+    // supersampled extents grid is finer than that, resample per extent column.
+    if (s.waveExtents && extCols > sampleW) {
+        context_->CSSetShader(csExtents_.Get(), nullptr, 0);
+        context_->Dispatch(DivUp(extCols, 8), DivUp(sampleH, 8), 1);
+    }
+
     ID3D11UnorderedAccessView* nUAV[] = { nullptr, nullptr, nullptr };
     context_->CSSetUnorderedAccessViews(0, 3, nUAV, nullptr);
     ID3D11ShaderResourceView* nSRV[] = { nullptr, nullptr };
     context_->CSSetShaderResources(0, 2, nSRV);
 
     extReadbackValid_ = false;
-    if (s.extents && s.extentsStyle == 1) ReadbackExtents();
+    if (s.waveExtents && s.waveExtentsStyle == 1) ReadbackExtents();
 }
 
 void WaveformScope::ReadbackExtents() {
@@ -202,13 +210,13 @@ void WaveformScope::Render(UINT outW, UINT outH, const ScopeFrame& f, const Sett
         cb->graphCols = graphCols_; cb->bins = bins_; cb->channels = channels_; cb->mode = curMode_;
         // Normalize brightness so a given gain looks the same across quality levels.
         cb->gain = s.gain * (2025.0f / perColSamples_);
-        cb->colorize = s.colorize ? 1u : 0u;
-        cb->extentsPoints = (s.extents && s.extentsStyle == 0) ? 1u : 0u;
+        cb->colorize = s.waveColorize ? 1u : 0u;
+        cb->extentsPoints = (s.waveExtents && s.waveExtentsStyle == 0) ? 1u : 0u;
         cb->chanMask = (s.channelEnabled[0] ? 1u : 0u) | (s.channelEnabled[1] ? 2u : 0u) | (s.channelEnabled[2] ? 4u : 0u);
         cb->uvScaleX = 1.0f / f.zoom; cb->uvScaleY = 1.0f / f.zoom;
         cb->uvOffX = f.panX; cb->uvOffY = f.panY;
         cb->yAxisTop01 = (float)YAxisTop01(f, s); cb->extentCols = extCols_;
-        cb->extentsOpacity = std::clamp(s.extentsOpacity, 0.0f, 1.0f);
+        cb->extentsOpacity = std::clamp(s.waveExtentsOpacity, 0.0f, 1.0f);
         cb->p1 = 0;
         context_->Unmap(graphCB_.Get(), 0);
     }
@@ -294,7 +302,7 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
     }
 
     // Extents white envelope line (style 1).
-    if (s.extents && s.extentsStyle == 1 && extReadbackValid_ && extCols_ > 1) {
+    if (s.waveExtents && s.waveExtentsStyle == 1 && extReadbackValid_ && extCols_ > 1) {
         auto binToY = [&](double bin) -> float {
             double fullPos = bin / (double)(bins_ - 1);
             double yTop = YAxisTop01(f, s);
@@ -317,7 +325,7 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
             hi.push_back(ImVec2(x, binToY(mx)));
             lo.push_back(ImVec2(x, binToY(mn)));
         }
-        ImU32 envCol = IM_COL32(255, 255, 255, (int)(std::clamp(s.extentsOpacity, 0.0f, 1.0f) * 230.0f));
+        ImU32 envCol = IM_COL32(255, 255, 255, (int)(std::clamp(s.waveExtentsOpacity, 0.0f, 1.0f) * 230.0f));
         dl->PushClipRect(f.graphP0, f.graphP1, true);
         if (hi.size() > 1) dl->AddPolyline(hi.data(), (int)hi.size(), envCol, 0, 1.0f);
         if (lo.size() > 1) dl->AddPolyline(lo.data(), (int)lo.size(), envCol, 0, 1.0f);
@@ -327,11 +335,12 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
     // Reference lines (draggable).
     ImGuiIO& io = ImGui::GetIO();
     bool hovered = ImGui::IsMouseHoveringRect(f.graphP0, f.graphP1);
+    const int refAlpha = (int)(std::clamp(s.refLineOpacity, 0.0f, 1.0f) * 255.0f);
     for (size_t i = 0; i < s.refLines.size(); ++i) {
         if (!s.refLines[i].enabled) continue;
         float y = NitsToScreenY(s.refLines[i].nits, f, s);
         if (!inRange(y)) continue;
-        ImU32 col = IM_COL32(255, 210, 90, 230);
+        ImU32 col = IM_COL32(255, 210, 90, refAlpha);
         dl->PushClipRect(f.graphP0, f.graphP1, true);
         dl->AddLine(ImVec2(left, y), ImVec2(right, y), col, std::max(1.0f, s.refLineThickness));
         dl->PopClipRect();
@@ -344,6 +353,18 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
         if (io.MouseDown[0] && draggingRef_ < (int)s.refLines.size())
             s.refLines[draggingRef_].nits = std::clamp(ScreenYToNits(io.MousePos.y, f, s), 0.0, 10000.0);
         else draggingRef_ = -1;
+    }
+
+    // Nit value of the axis position under the cursor, attached to the cursor.
+    if (s.showCursorNits && hovered && ImGui::IsWindowHovered()) {
+        char lab[32];
+        FormatNits(std::clamp(ScreenYToNits(io.MousePos.y, f, s), 0.0, 10000.0), lab, sizeof(lab));
+        ImVec2 ts = ImGui::CalcTextSize(lab);
+        ImVec2 tp(io.MousePos.x + 14.0f, io.MousePos.y - ts.y * 0.5f);
+        if (tp.x + ts.x > right) tp.x = io.MousePos.x - ts.x - 10.0f;
+        tp.y = std::clamp(tp.y, top, bot - ts.y);
+        dl->AddText(ImVec2(tp.x + 1, tp.y + 1), IM_COL32(0, 0, 0, 200), lab);
+        dl->AddText(tp, IM_COL32(235, 235, 235, 230), lab);
     }
 
     // Hover probe circles.
@@ -370,8 +391,10 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
 }
 
 void WaveformScope::DrawControls(Settings& s) {
-    ImGui::RadioButton("Luminance", &s.waveMode, 0); ImGui::SameLine();
+    ImGui::RadioButton("Luminance", &s.waveMode, 0);
+    UiResetToggle(s.waveMode, UiDefaults().waveMode); ImGui::SameLine();
     ImGui::RadioButton("RGB", &s.waveMode, 1);
+    UiResetToggle(s.waveMode, UiDefaults().waveMode);
 
     if (s.waveMode == 1) {
         // DaVinci-style R G B toggle squares.
@@ -384,40 +407,66 @@ void WaveformScope::DrawControls(Settings& s) {
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, c);
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, c);
             if (ImGui::Button(names[i], ImVec2(26, 26))) s.channelEnabled[i] = !s.channelEnabled[i];
+            UiResetToggle(s.channelEnabled[i], true);
             ImGui::PopStyleColor(3); ImGui::PopID();
             if (i < 2) ImGui::SameLine();
         }
     }
 
-    ImGui::Checkbox("Colorize", &s.colorize);
-    ImGui::Checkbox("Extents", &s.extents);
-    if (s.extents) {
+    ImGui::Checkbox("Colorize", &s.waveColorize);
+    UiResetToggle(s.waveColorize, UiDefaults().waveColorize);
+    ImGui::Checkbox("Extents", &s.waveExtents);
+    UiResetToggle(s.waveExtents, UiDefaults().waveExtents);
+    if (s.waveExtents) {
         ImGui::SameLine();
         ImGui::SetNextItemWidth(150);
         const char* styles[] = { "Colored points", "White envelope line" };
-        ImGui::Combo("##extstyle", &s.extentsStyle, styles, 2);
-        ImGui::Checkbox("Supersample extents", &s.extentsSupersample);
+        ImGui::Combo("##extstyle", &s.waveExtentsStyle, styles, 2);
+        UiResetToggle(s.waveExtentsStyle, UiDefaults().waveExtentsStyle);
+        // At per-pixel quality the extents trace already samples every source
+        // column, so supersampling would be a no-op — hide the toggle.
+        if (!s.perPixelQuality()) {
+            ImGui::Checkbox("Supersample extents", &s.waveExtentsSupersample);
+            UiResetToggle(s.waveExtentsSupersample, UiDefaults().waveExtentsSupersample);
+        }
         ImGui::SetNextItemWidth(150);
-        ImGui::SliderFloat("Extents opacity", &s.extentsOpacity, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Extents opacity", &s.waveExtentsOpacity, 0.0f, 1.0f, "%.2f");
+        UiResetSlider(s.waveExtentsOpacity, UiDefaults().waveExtentsOpacity);
     }
     ImGui::SliderFloat("Brightness", &s.gain, 0.001f, 0.5f, "%.3f", ImGuiSliderFlags_Logarithmic);
+    UiResetSlider(s.gain, UiDefaults().gain);
     ImGui::Checkbox("Zoom Y to SDR white", &s.sdrWhiteZoom);
+    UiResetToggle(s.sdrWhiteZoom, UiDefaults().sdrWhiteZoom);
     ImGui::Checkbox("Low pass filter", &s.lowPass);
-    if (s.lowPass) { ImGui::SameLine(); ImGui::SetNextItemWidth(120); ImGui::SliderFloat("Strength##lpa", &s.lowPassAmount, 0.0f, 1.0f, "%.2f"); }
+    UiResetToggle(s.lowPass, UiDefaults().lowPass);
+    if (s.lowPass) {
+        ImGui::SameLine(); ImGui::SetNextItemWidth(120);
+        ImGui::SliderFloat("Strength##lpa", &s.lowPassAmount, 0.0f, 1.0f, "%.2f");
+        UiResetSlider(s.lowPassAmount, UiDefaults().lowPassAmount);
+    }
 
     // Reference lines: custom count, log drag (shift = 10x finer), thickness.
     ImGui::SeparatorText("Reference lines");
     ImGui::SetNextItemWidth(120);
     ImGui::SliderFloat("Thickness", &s.refLineThickness, 1.0f, 6.0f, "%.1f px");
+    UiResetSlider(s.refLineThickness, UiDefaults().refLineThickness);
+    ImGui::SetNextItemWidth(120);
+    ImGui::SliderFloat("Opacity##ref", &s.refLineOpacity, 0.0f, 1.0f, "%.2f");
+    UiResetSlider(s.refLineOpacity, UiDefaults().refLineOpacity);
     ImGuiIO& io = ImGui::GetIO();
+    const Settings& defaults = UiDefaults();
     for (size_t i = 0; i < s.refLines.size(); ++i) {
         ImGui::PushID((int)i + 500);
-        ImGui::Checkbox("##en", &s.refLines[i].enabled); ImGui::SameLine();
+        const RefLine defaultRef = i < defaults.refLines.size() ? defaults.refLines[i] : RefLine{};
+        ImGui::Checkbox("##en", &s.refLines[i].enabled);
+        UiResetToggle(s.refLines[i].enabled, defaultRef.enabled);
+        ImGui::SameLine();
         float v = (float)s.refLines[i].nits;
         float speed = io.KeyShift ? 0.02f : 0.5f; // hold Shift for 10x-finer control
         ImGui::SetNextItemWidth(150);
         if (ImGui::DragFloat("nits", &v, speed, 0.0f, 10000.0f, "%.2f", ImGuiSliderFlags_Logarithmic))
             s.refLines[i].nits = std::clamp((double)v, 0.0, 10000.0);
+        UiResetSlider(s.refLines[i].nits, defaultRef.nits);
         ImGui::SameLine();
         if (ImGui::SmallButton("x")) { s.refLines.erase(s.refLines.begin() + i); ImGui::PopID(); break; }
         ImGui::PopID();
@@ -426,7 +475,7 @@ void WaveformScope::DrawControls(Settings& s) {
 }
 
 void WaveformScope::Shutdown() {
-    csClearExt_.Reset(); csHisto_.Reset(); computeCB_.Reset(); linear_.Reset();
+    csClearExt_.Reset(); csHisto_.Reset(); csExtents_.Reset(); computeCB_.Reset(); linear_.Reset();
     binsTex_.Reset(); binsUAV_.Reset(); binsSRV_.Reset();
     extTex_.Reset(); extUAV_.Reset(); extSRV_.Reset(); extStaging_.Reset();
     colorTex_.Reset(); colorUAV_.Reset(); colorSRV_.Reset();

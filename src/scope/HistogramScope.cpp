@@ -1,20 +1,19 @@
 #include "scope/HistogramScope.h"
 #include "util/ShaderCompiler.h"
 #include "util/PQ.h"
+#include "util/Format.h"
+#include "util/UiReset.h"
 #include <algorithm>
+#include <cmath>
 
 namespace {
 struct HCB { UINT bins, sampleW, sampleH, useBilinear; INT cropX, cropY, cropW, cropH; UINT srcW, srcH, p0, p1; };
 struct GCB { UINT bins, mode, chanMask, colorize; float gain, uvScaleX, uvOffX, xAxisTop01; };
 inline UINT DivUp(UINT a, UINT b) { return (a + b - 1) / b; }
-void SampleDims(Quality q, int cw, int ch, UINT& sw, UINT& sh) {
-    auto cap = [](int v, int m) { return (UINT)std::min(std::max(v, 1), m); };
-    switch (q) {
-    case Quality::Low:    sw = cap(cw, 960);  sh = cap(ch, 540);  break;
-    case Quality::Medium: sw = cap(cw, 1440); sh = cap(ch, 810);  break;
-    case Quality::High:   sw = cap(cw, 1920); sh = cap(ch, 1080); break;
-    default:              sw = cap(cw, 7680); sh = cap(ch, 4320); break;
-    }
+void SampleDims(const Settings& s, int cw, int ch, UINT& sw, UINT& sh) {
+    float f = std::clamp(s.qualityDownsample, 1.0f, 16.0f);
+    auto dim = [f](int v, int m) { return (UINT)std::clamp((int)std::lround(v / f), 1, m); };
+    sw = dim(cw, 7680); sh = dim(ch, 4320);
 }
 }
 
@@ -46,7 +45,7 @@ bool HistogramScope::Init(ID3D11Device* dev) {
 
 void HistogramScope::Compute(const ScopeInput& in, const Settings& s) {
     if (!in.srcSRV || in.cropW <= 0 || in.cropH <= 0) return;
-    UINT sw, sh; SampleDims(s.quality, in.cropW, in.cropH, sw, sh);
+    UINT sw, sh; SampleDims(s, in.cropW, in.cropH, sw, sh);
     totalSamples_ = std::max(1.0f, (float)sw * (float)sh);
     D3D11_MAPPED_SUBRESOURCE ms;
     if (SUCCEEDED(context_->Map(computeCB_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
@@ -88,7 +87,7 @@ void HistogramScope::Render(UINT outW, UINT outH, const ScopeFrame& f, const Set
         GCB* cb = (GCB*)ms.pData;
         cb->bins = bins_; cb->mode = (UINT)s.histoMode;
         cb->chanMask = (s.histoChannelEnabled[0] ? 1u : 0u) | (s.histoChannelEnabled[1] ? 2u : 0u) | (s.histoChannelEnabled[2] ? 4u : 0u);
-        cb->colorize = s.colorize ? 1u : 0u;
+        cb->colorize = s.histoColorize ? 1u : 0u;
         cb->gain = s.histoGain * (2073600.0f / totalSamples_);
         cb->uvScaleX = 1.0f / f.zoom; cb->uvOffX = f.panX;
         cb->xAxisTop01 = (float)XAxisTop01(f, s);
@@ -116,6 +115,11 @@ float HistogramScope::NitsToScreenX(double nits, const ScopeFrame& f, const Sett
     double pos01 = pq::NitsToPos01(nits) / XAxisTop01(f, s);
     double screenUVx = (pos01 - f.panX) * f.zoom;
     return f.graphP0.x + (float)(screenUVx * (f.graphP1.x - f.graphP0.x));
+}
+double HistogramScope::ScreenXToNits(float x, const ScopeFrame& f, const Settings& s) const {
+    double screenUVx = (double)(x - f.graphP0.x) / (double)(f.graphP1.x - f.graphP0.x);
+    double pos01 = (screenUVx / f.zoom + f.panX) * XAxisTop01(f, s);
+    return pq::Pos01ToNits(std::clamp(pos01, 0.0, 1.0));
 }
 
 void HistogramScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s) {
@@ -145,6 +149,19 @@ void HistogramScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& 
         dl->AddText(ImVec2(x - ts.x * 0.5f, bot + 4.0f), colText, lab);
     }
 
+    // Nit value of the axis position under the cursor, attached to the cursor.
+    ImGuiIO& io = ImGui::GetIO();
+    if (s.showCursorNits && ImGui::IsMouseHoveringRect(f.graphP0, f.graphP1) && ImGui::IsWindowHovered()) {
+        char lab[32];
+        FormatNits(std::clamp(ScreenXToNits(io.MousePos.x, f, s), 0.0, 10000.0), lab, sizeof(lab));
+        ImVec2 ts = ImGui::CalcTextSize(lab);
+        ImVec2 tp(io.MousePos.x + 14.0f, io.MousePos.y - ts.y * 0.5f);
+        if (tp.x + ts.x > right) tp.x = io.MousePos.x - ts.x - 10.0f;
+        tp.y = std::clamp(tp.y, top, bot - ts.y);
+        dl->AddText(ImVec2(tp.x + 1, tp.y + 1), IM_COL32(0, 0, 0, 200), lab);
+        dl->AddText(tp, IM_COL32(235, 235, 235, 230), lab);
+    }
+
     // Hover probe: vertical markers at the hovered pixel's nit value(s).
     if (s.showHoverProbe && f.probeValid) {
         dl->PushClipRect(f.graphP0, f.graphP1, true);
@@ -166,6 +183,7 @@ void HistogramScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& 
 void HistogramScope::DrawControls(Settings& s) {
     const char* modes[] = { "LRGB rows", "Overlay RGB", "Luma" };
     ImGui::SetNextItemWidth(160); ImGui::Combo("Mode", &s.histoMode, modes, 3);
+    UiResetToggle(s.histoMode, UiDefaults().histoMode);
     if (s.histoMode == 1) {
         const char* names[3] = { "R", "G", "B" };
         const ImVec4 onCol[3] = { {0.9f,0.2f,0.2f,1}, {0.2f,0.85f,0.2f,1}, {0.3f,0.5f,1.0f,1} };
@@ -174,10 +192,15 @@ void HistogramScope::DrawControls(Settings& s) {
             ImVec4 c = s.histoChannelEnabled[i] ? onCol[i] : ImVec4(0.2f, 0.2f, 0.2f, 1);
             ImGui::PushStyleColor(ImGuiCol_Button, c); ImGui::PushStyleColor(ImGuiCol_ButtonHovered, c); ImGui::PushStyleColor(ImGuiCol_ButtonActive, c);
             if (ImGui::Button(names[i], ImVec2(26, 26))) s.histoChannelEnabled[i] = !s.histoChannelEnabled[i];
+            UiResetToggle(s.histoChannelEnabled[i], true);
             ImGui::PopStyleColor(3); ImGui::PopID(); if (i < 2) ImGui::SameLine();
         }
     }
-    ImGui::Checkbox("Colorize", &s.colorize);
+    // Colorize only affects the overlay renderer; hide it in the other modes.
+    if (s.histoMode == 1) {
+        ImGui::Checkbox("Colorize", &s.histoColorize);
+        UiResetToggle(s.histoColorize, UiDefaults().histoColorize);
+    }
     // Friendly 0..100 brightness, log-mapped to gain (wide range, low default).
     const float gmin = 2e-6f, gmax = 1e-3f;
     float lg = std::log10(gmin), hg = std::log10(gmax);
@@ -186,7 +209,9 @@ void HistogramScope::DrawControls(Settings& s) {
     ImGui::SetNextItemWidth(180);
     if (ImGui::SliderInt("Brightness", &bri, 0, 100))
         s.histoGain = std::pow(10.0f, lg + (bri / 100.0f) * (hg - lg));
+    UiResetSlider(s.histoGain, UiDefaults().histoGain);
     ImGui::Checkbox("Zoom to SDR white", &s.histoSdrWhiteZoom);
+    UiResetToggle(s.histoSdrWhiteZoom, UiDefaults().histoSdrWhiteZoom);
 }
 
 void HistogramScope::Shutdown() {

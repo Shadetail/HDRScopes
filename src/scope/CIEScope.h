@@ -15,4 +15,7 @@ protected:
         return { 2, 0.0f, 0.62f, 0.0f, 0.60f, 0 };                          // u'v'
     }
     float Gain(const Settings& s) const override { return s.cieGain; }
+    bool  ShowExtents(const Settings& s) const override { return s.cieExtents; }
+    float ExtentsOpacity(const Settings& s) const override { return s.cieExtentsOpacity; }
+    bool  Colorized(const Settings& s) const override { return s.cieColorize; }
 };

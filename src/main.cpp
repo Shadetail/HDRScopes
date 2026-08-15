@@ -7,6 +7,8 @@
 #include "util/Common.h"
 #include "util/Settings.h"
 #include "util/SdrWhite.h"
+#include "util/Format.h"
+#include "util/UiReset.h"
 #include "app/D3DContext.h"
 #include "capture/CaptureSource.h"
 #include "capture/Region.h"
@@ -14,8 +16,10 @@
 #include "capture/PixelProbe.h"
 #include "compute/TestPattern.h"
 #include "compute/Blur.h"
+#include "compute/PeakMeter.h"
 #include "scope/ScopePanel.h"
 #include "scope/ScopeFactory.h"
+#include "resource.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_win32.h"
@@ -45,9 +49,11 @@ CaptureSource g_capture;
 TestPattern   g_test;
 Blur          g_blur;
 PixelProbe    g_probe;
+PeakMeter     g_peaks;
 Settings      g_set;
 ScopePanel    g_panels[4];
 HWND          g_hwnd = nullptr;
+int           g_lastCropW = 0, g_lastCropH = 0; // for the quality readout
 bool          g_resize = false; UINT g_resizeW = 0, g_resizeH = 0;
 bool          g_showControls = false;
 float         g_sdrWhiteNits = 200.0f;    // captured monitor (scope math)
@@ -84,10 +90,11 @@ static void DrawControlsWindow(float btnX, float btnY) {
     ImGui::SetNextWindowPos(ImVec2(btnX + 60.0f - w, btnY), ImGuiCond_Appearing);
     if (!ImGui::Begin("Controls", &g_showControls)) { ImGui::End(); return; }
 
-    // Distinct blue for the category headers/expanders so sections read clearly.
-    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.13f, 0.34f, 0.62f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.20f, 0.45f, 0.78f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.24f, 0.50f, 0.85f, 1.0f));
+    // Warm amber for the category headers/expanders — distinct from the blue
+    // input widgets so section titles read clearly instead of blending in.
+    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.46f, 0.30f, 0.09f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.56f, 0.38f, 0.13f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.63f, 0.44f, 0.17f, 1.0f));
 
     if (ImGui::CollapsingHeader("Capture", ImGuiTreeNodeFlags_DefaultOpen)) {
         auto outs = CaptureSource::EnumerateOutputs();
@@ -136,32 +143,63 @@ static void DrawControlsWindow(float btnX, float btnY) {
     }
 
     if (ImGui::CollapsingHeader("Quality & display", ImGuiTreeNodeFlags_DefaultOpen)) {
-        const char* q[] = { "Low", "Medium", "High", "Ultra", "Per-pixel" };
-        int qi = (int)g_set.quality; ImGui::SetNextItemWidth(160);
-        if (ImGui::Combo("Quality", &qi, q, 5)) g_set.quality = (Quality)qi;
+        // Continuous quality: 1 = per pixel (default), higher = downsample the
+        // source sampling by that factor (for weaker GPUs).
+        char qfmt[48];
+        if (g_set.perPixelQuality()) snprintf(qfmt, sizeof(qfmt), "per pixel");
+        else snprintf(qfmt, sizeof(qfmt), "1/%.2f resolution", g_set.qualityDownsample);
+        ImGui::SetNextItemWidth(160);
+        if (ImGui::SliderFloat("Quality", &g_set.qualityDownsample, 1.0f, 8.0f, qfmt, ImGuiSliderFlags_Logarithmic))
+            g_set.qualityDownsample = std::clamp(g_set.qualityDownsample, 1.0f, 8.0f);
+        UiResetSlider(g_set.qualityDownsample, UiDefaults().qualityDownsample);
+        if (!g_set.perPixelQuality() && g_lastCropW > 0) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("%dx%d", std::max(1, (int)std::lround(g_lastCropW / g_set.qualityDownsample)),
+                                         std::max(1, (int)std::lround(g_lastCropH / g_set.qualityDownsample)));
+        }
         ImGui::Checkbox("Bilinear source downsample", &g_set.bilinearDownsample);
+        UiResetToggle(g_set.bilinearDownsample, UiDefaults().bilinearDownsample);
         const char* ss[] = { "Off", "2x", "4x" };
         int ssi = g_set.renderSupersample <= 1 ? 0 : (g_set.renderSupersample >= 4 ? 2 : 1);
         ImGui::SetNextItemWidth(160);
         if (ImGui::Combo("Anti-alias (supersample)", &ssi, ss, 3)) g_set.renderSupersample = ssi == 0 ? 1 : (ssi == 1 ? 2 : 4);
+        UiResetToggle(g_set.renderSupersample, UiDefaults().renderSupersample);
         ImGui::SetNextItemWidth(160);
         ImGui::SliderFloat("Source blur", &g_set.sourceBlur, 0.0f, 8.0f, "%.1f px");
-        if (g_set.sourceBlur > 0.05f) ImGui::Checkbox("Blur affects waveform extents", &g_set.blurExtents);
+        UiResetSlider(g_set.sourceBlur, UiDefaults().sourceBlur);
+        if (g_set.sourceBlur > 0.05f) {
+            ImGui::Checkbox("Blur affects waveform extents", &g_set.blurExtents);
+            UiResetToggle(g_set.blurExtents, UiDefaults().blurExtents);
+        }
         ImGui::Checkbox("Show FPS", &g_set.showFps);
+        UiResetToggle(g_set.showFps, UiDefaults().showFps);
         ImGui::SetNextItemWidth(160);
         ImGui::SliderInt("FPS limit (0=vsync)", &g_set.fpsLimit, 0, 240);
+        UiResetSlider(g_set.fpsLimit, UiDefaults().fpsLimit);
         ImGui::Checkbox("UI follows Windows SDR white", &g_set.uiFollowSdrWhite);
+        UiResetToggle(g_set.uiFollowSdrWhite, UiDefaults().uiFollowSdrWhite);
         ImGui::Checkbox("Hover probe markers", &g_set.showHoverProbe);
+        UiResetToggle(g_set.showHoverProbe, UiDefaults().showHoverProbe);
         ImGui::SameLine(); ImGui::SetNextItemWidth(70);
         ImGui::SliderFloat("Size", &g_set.hoverCircleRadius, 3.0f, 24.0f, "%.0f");
+        UiResetSlider(g_set.hoverCircleRadius, UiDefaults().hoverCircleRadius);
         ImGui::Checkbox("Hover readout (top)", &g_set.showHoverReadout);
+        UiResetToggle(g_set.showHoverReadout, UiDefaults().showHoverReadout);
         ImGui::SameLine(); ImGui::Checkbox("8-bit SDR", &g_set.showSdr8bit);
-        if (g_set.showHoverReadout) ImGui::Checkbox("Readout background", &g_set.readoutBg);
+        UiResetToggle(g_set.showSdr8bit, UiDefaults().showSdr8bit);
+        if (g_set.showHoverReadout) {
+            ImGui::Checkbox("Readout background", &g_set.readoutBg);
+            UiResetToggle(g_set.readoutBg, UiDefaults().readoutBg);
+        }
+        ImGui::Checkbox("Nit value at cursor", &g_set.showCursorNits);
+        UiResetToggle(g_set.showCursorNits, UiDefaults().showCursorNits);
     }
 
     if (ImGui::CollapsingHeader("Graticule", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // (no right-click reset on the swatch: ColorEdit owns that gesture)
         ImGui::ColorEdit3("Color", &g_set.graticuleColor.x, ImGuiColorEditFlags_NoInputs);
         ImGui::SliderFloat("Opacity", &g_set.graticuleOpacity, 0.0f, 1.0f);
+        UiResetSlider(g_set.graticuleOpacity, UiDefaults().graticuleOpacity);
     }
 
     int count = (int)g_set.layout;
@@ -203,32 +241,29 @@ static void Sdr8(float scrgb, float sdrNorm, char* out, size_t n) {
     snprintf(out, n, "%d", (int)(e * 255.0f + 0.5f));
 }
 
-// Format a nit value with magnitude-appropriate precision: ~4 significant
-// figures, trailing zeros stripped. e.g. 0.000634, 0.0101, 13.5, 104.6, 500.
-static void FormatNits(double v, char* out, size_t n) {
-    if (!(v > 0.0)) { snprintf(out, n, "0"); return; }
-    int e = (int)std::floor(std::log10(v));
-    int d = std::clamp(3 - e, 0, 9);  // decimals for ~4 sig figs
-    snprintf(out, n, "%.*f", d, v);
-    if (d > 0) {  // strip trailing zeros and a dangling decimal point
-        char* dot = strchr(out, '.');
-        if (dot) {
-            char* end = out + strlen(out) - 1;
-            while (end > dot && *end == '0') *end-- = '\0';
-            if (end == dot) *end = '\0';
-        }
-    }
-}
+// L/R/G/B nit readout (+ optional 8-bit SDR) top-center. Shows the hovered
+// pixel when the cursor is over the target region; otherwise falls back to the
+// per-channel PEAKS of the region (four independent maxima — the brightest
+// pixel in luminance is not necessarily the brightest in any one channel).
+static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float sdrNits,
+                             const float peakLRGB[4], bool peaksValid, ImVec2 a0, ImVec2 a1) {
+    if (!s.showHoverReadout) return;
+    const bool peaks = !probe.probeValid;
+    if (peaks && !peaksValid) return;
 
-// L/R/G/B nit readout (+ optional 8-bit SDR) for the hovered pixel, top-center.
-static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float sdrNits, ImVec2 a0, ImVec2 a1) {
-    if (!s.showHoverReadout || !probe.probeValid) return;
-    double lum = 0.2126390 * probe.probeRGB[0] + 0.7151686 * probe.probeRGB[1] + 0.0721923 * probe.probeRGB[2];
+    float rgb[3]; double lum;
+    if (peaks) {
+        lum = peakLRGB[0];
+        rgb[0] = peakLRGB[1]; rgb[1] = peakLRGB[2]; rgb[2] = peakLRGB[3];
+    } else {
+        lum = 0.2126390 * probe.probeRGB[0] + 0.7151686 * probe.probeRGB[1] + 0.0721923 * probe.probeRGB[2];
+        rgb[0] = probe.probeRGB[0]; rgb[1] = probe.probeRGB[1]; rgb[2] = probe.probeRGB[2];
+    }
     char vl[32], vr[32], vg[32], vb[32];
-    FormatNits(std::max(0.0, lum) * 80.0,             vl, sizeof(vl));
-    FormatNits(std::max(0.0f, probe.probeRGB[0]) * 80.0, vr, sizeof(vr));
-    FormatNits(std::max(0.0f, probe.probeRGB[1]) * 80.0, vg, sizeof(vg));
-    FormatNits(std::max(0.0f, probe.probeRGB[2]) * 80.0, vb, sizeof(vb));
+    FormatNits(std::max(0.0, lum) * 80.0,     vl, sizeof(vl));
+    FormatNits(std::max(0.0f, rgb[0]) * 80.0, vr, sizeof(vr));
+    FormatNits(std::max(0.0f, rgb[1]) * 80.0, vg, sizeof(vg));
+    FormatNits(std::max(0.0f, rgb[2]) * 80.0, vb, sizeof(vb));
 
     // Channel letters get channel colors (blue brightened so it reads on black).
     const ImU32 white = IM_COL32(235, 235, 235, 240);
@@ -244,7 +279,7 @@ static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float s
     add("L ", white); add(vl, white); add("    ", white);
     add("R ", colR);  add(vr, white); add("   ", white);
     add("G ", colG);  add(vg, white); add("   ", white);
-    add("B ", colB);  add(vb, white); add("   nits", white);
+    add("B ", colB);  add(vb, white); add(peaks ? "   peak nits" : "   nits", white);
 
     float widths[12]; float total = 0;
     for (int i = 0; i < nseg; ++i) { widths[i] = ImGui::CalcTextSize(segs[i].txt).x; total += widths[i]; }
@@ -253,7 +288,7 @@ static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float s
     if (s.showSdr8bit) {
         float sn = sdrNits / 80.0f;
         char r[8], g[8], b[8];
-        Sdr8(probe.probeRGB[0], sn, r, sizeof(r)); Sdr8(probe.probeRGB[1], sn, g, sizeof(g)); Sdr8(probe.probeRGB[2], sn, b, sizeof(b));
+        Sdr8(rgb[0], sn, r, sizeof(r)); Sdr8(rgb[1], sn, g, sizeof(g)); Sdr8(rgb[2], sn, b, sizeof(b));
         snprintf(line2, sizeof(line2), "SDR  %s, %s, %s", r, g, b);
     }
 
@@ -301,6 +336,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
     WNDCLASSEXW wc = { sizeof(wc) };
     wc.style = CS_HREDRAW | CS_VREDRAW; wc.lpfnWndProc = WndProc; wc.hInstance = hInst;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW); wc.lpszClassName = L"HDRScopesWnd";
+    wc.hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(IDI_APPICON));
+    wc.hIconSm = wc.hIcon;
     RegisterClassExW(&wc);
 
     int wx = CW_USEDEFAULT, wy = CW_USEDEFAULT, ww = 1440, wh = 900;
@@ -322,6 +359,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
     g_test.Init(g_d3d.Device());
     g_blur.Init(g_d3d.Device());
     g_probe.Init(g_d3d.Device());
+    g_peaks.Init(g_d3d.Device());
     g_capture.Init(g_d3d.Device(), g_set.outputIndex >= 0 ? POINT{ 0,0 } : DefaultCapturePoint());
     if (g_set.outputIndex >= 0) g_capture.RetargetToIndex(g_set.outputIndex);
     for (auto& p : g_panels) p.Init(g_d3d.Device());
@@ -384,6 +422,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         int cx = 0, cy = 0, cw = (int)srcW, ch = (int)srcH;
         if (!(usingTest || g_set.regionMode == 0))
             if (!region.ResolveToTexel(outRect, srcW, srcH, cx, cy, cw, ch)) { cx = cy = 0; cw = srcW; ch = srcH; }
+        g_lastCropW = cw; g_lastCropH = ch;
 
         // Optional source blur (scopes read the blurred texture; the probe below
         // still reads the original pixels for an accurate readout).
@@ -394,6 +433,14 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         ScopeInput input; input.srcSRV = scopeSRV; input.rawSRV = srcSRV; input.srcW = srcW; input.srcH = srcH;
         input.cropX = cx; input.cropY = cy; input.cropW = cw; input.cropH = ch;
         input.sdrWhiteNits = g_sdrWhiteNits;
+
+        // ---- Region peaks (for the readout when the cursor is off-region) ----
+        // Reads the unblurred source, like the probe, so peaks reflect the true
+        // signal.
+        float peakLRGB[4] = { 0, 0, 0, 0 };
+        bool peaksValid = false;
+        if (g_set.showHoverReadout && srcSRV)
+            peaksValid = g_peaks.Measure(srcSRV, srcW, srcH, cx, cy, cw, ch, peakLRGB);
 
         // ---- Hover probe (source pixel under cursor) ----
         ScopeFrame probe;
@@ -441,7 +488,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         // Hover readout, centered over the left half (so it clears the divider/buttons
         // in 2/4-up layouts and stays over the left scope).
         ImVec2 readoutR1 = (count == 1) ? area1 : ImVec2(area0.x + (area1.x - area0.x) * 0.5f, area1.y);
-        DrawHoverReadout(probe, g_set, g_sdrWhiteNits, area0, readoutR1);
+        DrawHoverReadout(probe, g_set, g_sdrWhiteNits, peakLRGB, peaksValid, area0, readoutR1);
 
         // Opaque widget backgrounds for the floating top strips (so they read
         // clearly over the scope graphs instead of being semi-transparent).
@@ -539,6 +586,6 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
 
     ImGui_ImplDX11_Shutdown(); ImGui_ImplWin32_Shutdown(); ImGui::DestroyContext();
     for (auto& p : g_panels) if (p.Scope()) p.Scope()->Shutdown();
-    g_test.Shutdown(); g_probe.Shutdown(); g_capture.Shutdown(); g_d3d.Shutdown();
+    g_test.Shutdown(); g_probe.Shutdown(); g_peaks.Shutdown(); g_capture.Shutdown(); g_d3d.Shutdown();
     return 0;
 }

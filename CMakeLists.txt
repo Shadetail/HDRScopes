@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(HDRScopes CXX)
+if(MSVC)
+    enable_language(RC)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,6 +36,7 @@ add_executable(HDRScopes WIN32
     src/capture/PixelProbe.cpp
     src/compute/TestPattern.cpp
     src/compute/Blur.cpp
+    src/compute/PeakMeter.cpp
     src/scope/ScopePanel.cpp
     src/scope/ScopeFactory.cpp
     src/scope/WaveformScope.cpp
@@ -40,8 +44,9 @@ add_executable(HDRScopes WIN32
     src/scope/ChromaScope.cpp
     src/scope/VectorScope.cpp
     src/scope/CIEScope.cpp
+    resources/HDRScopes.rc
 )
-target_include_directories(HDRScopes PRIVATE src)
+target_include_directories(HDRScopes PRIVATE src resources)
 target_link_libraries(HDRScopes PRIVATE
     imgui
     d3d11 dxgi d3dcompiler dxguid msimg32 winmm

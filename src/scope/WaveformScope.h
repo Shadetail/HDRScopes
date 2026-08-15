@@ -35,7 +35,7 @@ private:
     ComPtr<ID3D11DeviceContext> context_;
 
     // Compute.
-    ComPtr<ID3D11ComputeShader> csClearExt_, csHisto_;
+    ComPtr<ID3D11ComputeShader> csClearExt_, csHisto_, csExtents_;
     ComPtr<ID3D11Buffer>        computeCB_;
     ComPtr<ID3D11SamplerState>  linear_;
     ComPtr<ID3D11Texture2D>           binsTex_, extTex_, extStaging_, colorTex_;

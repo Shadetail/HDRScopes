@@ -8,6 +8,7 @@ cbuffer GCB : register(b0)
     float gGain, gMinX, gMaxX, gMinY;
     float gMaxY, gScale, gUVScaleX, gUVScaleY;
     float gUVOffX, gUVOffY, gDotRadius, gExtentsOpacity;
+    float gRTW, gRTH, gSSX, gSSY; // RT size + RT-pixels per panel-pixel
 };
 Texture2D<uint> gAccum : register(t0);
 
@@ -27,6 +28,17 @@ struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
 VSOut VSMain(uint vid : SV_VertexID) {
     VSOut o; float2 uv = float2((vid << 1) & 2, vid & 2);
     o.uv = uv; o.pos = float4(uv.x * 2 - 1, 1 - uv.y * 2, 0, 1); return o;
+}
+
+// Extents occupancy test for the centre of panel pixel pp (ss = RT px per panel
+// px): true when the accumulation grid has any sample within eR grid cells.
+bool ExtentsOccupied(float2 pp, float2 ss, int eR)
+{
+    float2 suv = (pp + 0.5) * ss / float2(gRTW, gRTH); // screen uv
+    float2 uv = float2(gUVOffX, gUVOffY) + suv * float2(gUVScaleX, gUVScaleY);
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return false;
+    int2 c = int2(uv * gSize);
+    return MaxCount(c, eR) > 0u;
 }
 
 // Reconstruct the true vectorscope colour at a plot position from its Cb/Cr,
@@ -82,16 +94,28 @@ float4 PSMain(VSOut i) : SV_Target
         rgb = col * a;
     }
 
-    // Extents: a thin outline ring just OUTSIDE the occupied region, marking the
-    // reach (gamut) of the signal. Uses its own occupancy radius (independent of
-    // the cosmetic dot size) with a small minimum so sparse clouds still read as
-    // a connected envelope rather than a ring around every isolated point.
+    // Extents: an outline just OUTSIDE the occupied region, marking the reach
+    // (gamut) of the signal. Occupancy uses its own radius (independent of the
+    // cosmetic dot size) with a small minimum so sparse clouds still read as a
+    // connected envelope rather than a ring around every isolated point.
+    //
+    // The outline is drawn in SCREEN space: positions are quantized to panel
+    // pixels (the RT is supersampled by gSSX/gSSY, then shown at panel size) and
+    // a panel pixel lights up when it is outside the region but a 4-neighbour is
+    // inside. That keeps the line exactly one panel pixel thick — crisp at any
+    // window size, zoom, or supersample factor.
     if (gExtents && gExtentsOpacity > 0.0) {
         int eR = max(R, 2);
-        bool here = MaxCount(px, eR) > 0u;
-        bool near = MaxCount(px, eR + 1) > 0u;
-        if (!here && near)
-            rgb = max(rgb, float3(1, 1, 1) * gExtentsOpacity);
+        float2 ss = max(float2(gSSX, gSSY), 1e-4);
+        float2 pp = floor(i.pos.xy / ss); // panel-pixel coords
+        if (!ExtentsOccupied(pp, ss, eR)) {
+            bool nearby = ExtentsOccupied(pp + float2(1, 0), ss, eR)
+                       || ExtentsOccupied(pp - float2(1, 0), ss, eR)
+                       || ExtentsOccupied(pp + float2(0, 1), ss, eR)
+                       || ExtentsOccupied(pp - float2(0, 1), ss, eR);
+            if (nearby)
+                rgb = max(rgb, float3(1, 1, 1) * gExtentsOpacity);
+        }
     }
 
     if (all(rgb <= 0.0)) return float4(0, 0, 0, 1);

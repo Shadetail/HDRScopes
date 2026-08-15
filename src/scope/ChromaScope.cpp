@@ -1,22 +1,20 @@
 #include "scope/ChromaScope.h"
 #include "util/ShaderCompiler.h"
 #include <algorithm>
+#include <cmath>
 
 namespace {
 struct CCB { UINT size, mode, sampleW, sampleH; UINT useBilinear, pa, pb, pc;
              INT cropX, cropY, cropW, cropH; UINT srcW, srcH, pd, pe;
              float minX, maxX, minY, maxY; float scale, sdrNorm, pg, ph; };
 struct GCB { UINT size, mode, colorize, extents; float gain, minX, maxX, minY;
-             float maxY, scale, uvScaleX, uvScaleY; float uvOffX, uvOffY, dotRadius, extentsOpacity; };
+             float maxY, scale, uvScaleX, uvScaleY; float uvOffX, uvOffY, dotRadius, extentsOpacity;
+             float rtW, rtH, ssX, ssY; };
 inline UINT DivUp(UINT a, UINT b) { return (a + b - 1) / b; }
-void SampleDims(Quality q, int cw, int ch, UINT& sw, UINT& sh) {
-    auto cap = [](int v, int m) { return (UINT)std::min(std::max(v, 1), m); };
-    switch (q) {
-    case Quality::Low:    sw = cap(cw, 960);  sh = cap(ch, 540);  break;
-    case Quality::Medium: sw = cap(cw, 1440); sh = cap(ch, 810);  break;
-    case Quality::High:   sw = cap(cw, 1920); sh = cap(ch, 1080); break;
-    default:              sw = cap(cw, 7680); sh = cap(ch, 4320); break;
-    }
+void SampleDims(const Settings& s, int cw, int ch, UINT& sw, UINT& sh) {
+    float f = std::clamp(s.qualityDownsample, 1.0f, 16.0f);
+    auto dim = [f](int v, int m) { return (UINT)std::clamp((int)std::lround(v / f), 1, m); };
+    sw = dim(cw, 7680); sh = dim(ch, 4320);
 }
 }
 
@@ -49,7 +47,7 @@ bool ChromaScope::Init(ID3D11Device* dev) {
 void ChromaScope::Compute(const ScopeInput& in, const Settings& s) {
     if (!in.srcSRV || in.cropW <= 0 || in.cropH <= 0) return;
     PlotRange r = Range(s);
-    UINT sw, sh; SampleDims(s.quality, in.cropW, in.cropH, sw, sh);
+    UINT sw, sh; SampleDims(s, in.cropW, in.cropH, sw, sh);
     D3D11_MAPPED_SUBRESOURCE ms;
     if (SUCCEEDED(context_->Map(computeCB_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
         CCB* cb = (CCB*)ms.pData;
@@ -95,14 +93,19 @@ void ChromaScope::Render(UINT outW, UINT outH, const ScopeFrame& f, const Settin
     if (SUCCEEDED(context_->Map(graphCB_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
         GCB* cb = (GCB*)ms.pData;
         *cb = {};
-        cb->size = size_; cb->mode = (UINT)r.mode; cb->colorize = s.colorize ? 1u : 0u;
+        cb->size = size_; cb->mode = (UINT)r.mode; cb->colorize = Colorized(s) ? 1u : 0u;
         cb->gain = Gain(s); cb->minX = r.minX; cb->maxX = r.maxX; cb->minY = r.minY; cb->maxY = r.maxY;
         cb->scale = (r.mode == 0) ? s.vectorScale : r.scale;
         cb->uvScaleX = 1.0f / f.zoom; cb->uvScaleY = 1.0f / f.zoom;
         cb->uvOffX = f.panX; cb->uvOffY = f.panY;
         cb->dotRadius = (float)s.chromaDotRadius;
-        cb->extents = s.extents ? 1u : 0u;
-        cb->extentsOpacity = std::clamp(s.extentsOpacity, 0.0f, 1.0f);
+        cb->extents = ShowExtents(s) ? 1u : 0u;
+        cb->extentsOpacity = std::clamp(ExtentsOpacity(s), 0.0f, 1.0f);
+        // RT-pixels per panel-pixel, so the shader can draw screen-space lines
+        // (the RT is rendered supersampled and drawn at panel size).
+        cb->rtW = (float)outW; cb->rtH = (float)outH;
+        cb->ssX = (float)outW / std::max(1.0f, f.graphP1.x - f.graphP0.x);
+        cb->ssY = (float)outH / std::max(1.0f, f.graphP1.y - f.graphP0.y);
         context_->Unmap(graphCB_.Get(), 0);
     }
     const float clear[4] = { 0, 0, 0, 1 };
