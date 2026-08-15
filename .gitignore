@@ -12,7 +12,8 @@
 CMakeCache.txt
 CMakeFiles/
 *.user
-# Reference repos (large, not part of build)
-/reference/repos/
+# Local-only reference material (manual excerpts, cloned repos, planning notes,
+# retired v1 code) — never publish this folder.
+/reference/
 # ImGui runtime layout (we use a code-defined layout)
 imgui.ini

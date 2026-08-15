@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(HDRScopes CXX)
+project(HDRScopes VERSION 1.0.0 LANGUAGES CXX)
 if(MSVC)
     enable_language(RC)
 endif()
@@ -53,7 +53,8 @@ target_link_libraries(HDRScopes PRIVATE
 )
 target_compile_definitions(HDRScopes PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 
-# Locate the shaders directory at runtime relative to the source tree.
+# Dev fallback shader path (shipped builds load shaders/ next to the exe).
 target_compile_definitions(HDRScopes PRIVATE
     HDRSCOPES_SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders"
+    HDRSCOPES_VERSION="${PROJECT_VERSION}"
 )

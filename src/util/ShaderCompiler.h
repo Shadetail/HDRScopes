@@ -1,5 +1,6 @@
-// Runtime HLSL compilation via d3dcompiler. Shaders live in HDRSCOPES_SHADER_DIR
-// and are compiled on demand so they can be iterated without a rebuild.
+// Runtime HLSL compilation via d3dcompiler. Shaders load from a shaders/ folder
+// next to the exe (shipped builds) or from HDRSCOPES_SHADER_DIR (dev builds,
+// so .hlsl edits take effect without a rebuild).
 #pragma once
 
 #include "util/Common.h"

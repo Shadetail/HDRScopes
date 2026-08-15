@@ -4,15 +4,32 @@
 
 namespace shader {
 
+static const std::wstring& ShaderDir() {
+    static const std::wstring dir = [] {
+        // Shipped builds carry a shaders/ folder next to the exe; prefer it.
+        wchar_t exe[MAX_PATH];
+        if (GetModuleFileNameW(nullptr, exe, MAX_PATH)) {
+            std::wstring d(exe);
+            size_t slash = d.find_last_of(L"\\/");
+            if (slash != std::wstring::npos) {
+                d.resize(slash + 1);
+                d += L"shaders";
+                if (GetFileAttributesW((d + L"\\colorspaces.hlsli").c_str()) != INVALID_FILE_ATTRIBUTES)
+                    return d;
+            }
+        }
+        // Dev fallback: the source-tree path baked in by CMake (narrow string,
+        // forward slashes are fine for Win32 file APIs). Keeps .hlsl edits
+        // rebuild-free when running from the build tree.
+        std::wstring d;
+        for (const char* c = HDRSCOPES_SHADER_DIR; *c; ++c) d += (wchar_t)*c;
+        return d;
+    }();
+    return dir;
+}
+
 static std::wstring ShaderPath(const wchar_t* filename) {
-    // HDRSCOPES_SHADER_DIR is a narrow string baked in by CMake (forward slashes
-    // are fine for Win32 file APIs). Widen it and append the filename.
-    const char* dir = HDRSCOPES_SHADER_DIR;
-    std::wstring p;
-    for (const char* c = dir; *c; ++c) p += (wchar_t)*c;
-    p += L"/";
-    p += filename;
-    return p;
+    return ShaderDir() + L"/" + filename;
 }
 
 ComPtr<ID3DBlob> CompileFromFile(const wchar_t* filename,

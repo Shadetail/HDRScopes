@@ -28,6 +28,10 @@
 #include <d3d11.h>
 #include <timeapi.h>
 #include <algorithm>
+
+// Widen the narrow HDRSCOPES_VERSION macro from CMake for the window title.
+#define HS_WIDEN2(x) L##x
+#define HS_WIDEN(x) HS_WIDEN2(x)
 #include <cmath>
 #include <cstring>
 
@@ -349,7 +353,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
     if (g_set.wndR > g_set.wndL && g_set.wndB > g_set.wndT) {
         wx = g_set.wndL; wy = g_set.wndT; ww = g_set.wndR - g_set.wndL; wh = g_set.wndB - g_set.wndT;
     }
-    HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"HDRScopes", WS_OVERLAPPEDWINDOW,
+    HWND hwnd = CreateWindowExW(0, wc.lpszClassName,
+        L"HDRScopes " HS_WIDEN(HDRSCOPES_VERSION), WS_OVERLAPPEDWINDOW,
         wx, wy, ww, wh, nullptr, nullptr, hInst, nullptr);
     g_hwnd = hwnd;
 
