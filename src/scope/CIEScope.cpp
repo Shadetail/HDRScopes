@@ -86,24 +86,24 @@ void CIEScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s) {
 void CIEScope::DrawControls(Settings& s) {
     const char* diags[] = { "xy (1931)", "u'v' (1976)" };
     ImGui::SetNextItemWidth(150); ImGui::Combo("Diagram", &s.cieDiagram, diags, 2);
-    UiResetToggle(s.cieDiagram, UiDefaults().cieDiagram);
+    UiReset(s.cieDiagram, UiDefaults().cieDiagram);
     ImGui::SliderFloat("Brightness", &s.cieGain, 0.00005f, 1.0f, "%.5f", ImGuiSliderFlags_Logarithmic);
-    UiResetSlider(s.cieGain, UiDefaults().cieGain);
+    UiReset(s.cieGain, UiDefaults().cieGain);
     ImGui::Checkbox("Colorize", &s.cieColorize);
-    UiResetToggle(s.cieColorize, UiDefaults().cieColorize);
+    UiReset(s.cieColorize, UiDefaults().cieColorize);
     ImGui::SliderInt("Dot size", &s.chromaDotRadius, 0, 6);
-    UiResetSlider(s.chromaDotRadius, UiDefaults().chromaDotRadius);
+    UiReset(s.chromaDotRadius, UiDefaults().chromaDotRadius);
     ImGui::Checkbox("Extents (gamut outline)", &s.cieExtents);
-    UiResetToggle(s.cieExtents, UiDefaults().cieExtents);
+    UiReset(s.cieExtents, UiDefaults().cieExtents);
     if (s.cieExtents) {
         ImGui::SameLine(); ImGui::SetNextItemWidth(110);
         ImGui::SliderFloat("##exop", &s.cieExtentsOpacity, 0.0f, 1.0f, "opacity %.2f");
-        UiResetSlider(s.cieExtentsOpacity, UiDefaults().cieExtentsOpacity);
+        UiReset(s.cieExtentsOpacity, UiDefaults().cieExtentsOpacity);
     }
     ImGui::Checkbox("Rec.709", &s.cieShowRec709);
-    UiResetToggle(s.cieShowRec709, UiDefaults().cieShowRec709); ImGui::SameLine();
+    UiReset(s.cieShowRec709, UiDefaults().cieShowRec709); ImGui::SameLine();
     ImGui::Checkbox("P3", &s.cieShowP3);
-    UiResetToggle(s.cieShowP3, UiDefaults().cieShowP3); ImGui::SameLine();
+    UiReset(s.cieShowP3, UiDefaults().cieShowP3); ImGui::SameLine();
     ImGui::Checkbox("Rec.2020", &s.cieShowRec2020);
-    UiResetToggle(s.cieShowRec2020, UiDefaults().cieShowRec2020);
+    UiReset(s.cieShowRec2020, UiDefaults().cieShowRec2020);
 }

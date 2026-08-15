@@ -392,9 +392,9 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
 
 void WaveformScope::DrawControls(Settings& s) {
     ImGui::RadioButton("Luminance", &s.waveMode, 0);
-    UiResetToggle(s.waveMode, UiDefaults().waveMode); ImGui::SameLine();
+    UiReset(s.waveMode, UiDefaults().waveMode); ImGui::SameLine();
     ImGui::RadioButton("RGB", &s.waveMode, 1);
-    UiResetToggle(s.waveMode, UiDefaults().waveMode);
+    UiReset(s.waveMode, UiDefaults().waveMode);
 
     if (s.waveMode == 1) {
         // DaVinci-style R G B toggle squares.
@@ -407,66 +407,66 @@ void WaveformScope::DrawControls(Settings& s) {
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, c);
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, c);
             if (ImGui::Button(names[i], ImVec2(26, 26))) s.channelEnabled[i] = !s.channelEnabled[i];
-            UiResetToggle(s.channelEnabled[i], true);
+            UiReset(s.channelEnabled[i], true);
             ImGui::PopStyleColor(3); ImGui::PopID();
             if (i < 2) ImGui::SameLine();
         }
     }
 
     ImGui::Checkbox("Colorize", &s.waveColorize);
-    UiResetToggle(s.waveColorize, UiDefaults().waveColorize);
+    UiReset(s.waveColorize, UiDefaults().waveColorize);
     ImGui::Checkbox("Extents", &s.waveExtents);
-    UiResetToggle(s.waveExtents, UiDefaults().waveExtents);
+    UiReset(s.waveExtents, UiDefaults().waveExtents);
     if (s.waveExtents) {
         ImGui::SameLine();
         ImGui::SetNextItemWidth(150);
         const char* styles[] = { "Colored points", "White envelope line" };
         ImGui::Combo("##extstyle", &s.waveExtentsStyle, styles, 2);
-        UiResetToggle(s.waveExtentsStyle, UiDefaults().waveExtentsStyle);
+        UiReset(s.waveExtentsStyle, UiDefaults().waveExtentsStyle);
         // At per-pixel quality the extents trace already samples every source
         // column, so supersampling would be a no-op — hide the toggle.
         if (!s.perPixelQuality()) {
             ImGui::Checkbox("Supersample extents", &s.waveExtentsSupersample);
-            UiResetToggle(s.waveExtentsSupersample, UiDefaults().waveExtentsSupersample);
+            UiReset(s.waveExtentsSupersample, UiDefaults().waveExtentsSupersample);
         }
         ImGui::SetNextItemWidth(150);
         ImGui::SliderFloat("Extents opacity", &s.waveExtentsOpacity, 0.0f, 1.0f, "%.2f");
-        UiResetSlider(s.waveExtentsOpacity, UiDefaults().waveExtentsOpacity);
+        UiReset(s.waveExtentsOpacity, UiDefaults().waveExtentsOpacity);
     }
     ImGui::SliderFloat("Brightness", &s.gain, 0.001f, 0.5f, "%.3f", ImGuiSliderFlags_Logarithmic);
-    UiResetSlider(s.gain, UiDefaults().gain);
+    UiReset(s.gain, UiDefaults().gain);
     ImGui::Checkbox("Zoom Y to SDR white", &s.sdrWhiteZoom);
-    UiResetToggle(s.sdrWhiteZoom, UiDefaults().sdrWhiteZoom);
+    UiReset(s.sdrWhiteZoom, UiDefaults().sdrWhiteZoom);
     ImGui::Checkbox("Low pass filter", &s.lowPass);
-    UiResetToggle(s.lowPass, UiDefaults().lowPass);
+    UiReset(s.lowPass, UiDefaults().lowPass);
     if (s.lowPass) {
         ImGui::SameLine(); ImGui::SetNextItemWidth(120);
         ImGui::SliderFloat("Strength##lpa", &s.lowPassAmount, 0.0f, 1.0f, "%.2f");
-        UiResetSlider(s.lowPassAmount, UiDefaults().lowPassAmount);
+        UiReset(s.lowPassAmount, UiDefaults().lowPassAmount);
     }
 
     // Reference lines: custom count, log drag (shift = 10x finer), thickness.
     ImGui::SeparatorText("Reference lines");
     ImGui::SetNextItemWidth(120);
     ImGui::SliderFloat("Thickness", &s.refLineThickness, 1.0f, 6.0f, "%.1f px");
-    UiResetSlider(s.refLineThickness, UiDefaults().refLineThickness);
+    UiReset(s.refLineThickness, UiDefaults().refLineThickness);
     ImGui::SetNextItemWidth(120);
     ImGui::SliderFloat("Opacity##ref", &s.refLineOpacity, 0.0f, 1.0f, "%.2f");
-    UiResetSlider(s.refLineOpacity, UiDefaults().refLineOpacity);
+    UiReset(s.refLineOpacity, UiDefaults().refLineOpacity);
     ImGuiIO& io = ImGui::GetIO();
     const Settings& defaults = UiDefaults();
     for (size_t i = 0; i < s.refLines.size(); ++i) {
         ImGui::PushID((int)i + 500);
         const RefLine defaultRef = i < defaults.refLines.size() ? defaults.refLines[i] : RefLine{};
         ImGui::Checkbox("##en", &s.refLines[i].enabled);
-        UiResetToggle(s.refLines[i].enabled, defaultRef.enabled);
+        UiReset(s.refLines[i].enabled, defaultRef.enabled);
         ImGui::SameLine();
         float v = (float)s.refLines[i].nits;
         float speed = io.KeyShift ? 0.02f : 0.5f; // hold Shift for 10x-finer control
         ImGui::SetNextItemWidth(150);
         if (ImGui::DragFloat("nits", &v, speed, 0.0f, 10000.0f, "%.2f", ImGuiSliderFlags_Logarithmic))
             s.refLines[i].nits = std::clamp((double)v, 0.0, 10000.0);
-        UiResetSlider(s.refLines[i].nits, defaultRef.nits);
+        UiReset(s.refLines[i].nits, defaultRef.nits);
         ImGui::SameLine();
         if (ImGui::SmallButton("x")) { s.refLines.erase(s.refLines.begin() + i); ImGui::PopID(); break; }
         ImGui::PopID();

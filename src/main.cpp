@@ -151,55 +151,57 @@ static void DrawControlsWindow(float btnX, float btnY) {
         ImGui::SetNextItemWidth(160);
         if (ImGui::SliderFloat("Quality", &g_set.qualityDownsample, 1.0f, 8.0f, qfmt, ImGuiSliderFlags_Logarithmic))
             g_set.qualityDownsample = std::clamp(g_set.qualityDownsample, 1.0f, 8.0f);
-        UiResetSlider(g_set.qualityDownsample, UiDefaults().qualityDownsample);
+        UiReset(g_set.qualityDownsample, UiDefaults().qualityDownsample);
         if (!g_set.perPixelQuality() && g_lastCropW > 0) {
             ImGui::SameLine();
             ImGui::TextDisabled("%dx%d", std::max(1, (int)std::lround(g_lastCropW / g_set.qualityDownsample)),
                                          std::max(1, (int)std::lround(g_lastCropH / g_set.qualityDownsample)));
         }
-        ImGui::Checkbox("Bilinear source downsample", &g_set.bilinearDownsample);
-        UiResetToggle(g_set.bilinearDownsample, UiDefaults().bilinearDownsample);
+        if (!g_set.perPixelQuality()) { // sampling is 1:1 at per-pixel, filter is a no-op
+            ImGui::Checkbox("Bilinear source downsample", &g_set.bilinearDownsample);
+            UiReset(g_set.bilinearDownsample, UiDefaults().bilinearDownsample);
+        }
         const char* ss[] = { "Off", "2x", "4x" };
         int ssi = g_set.renderSupersample <= 1 ? 0 : (g_set.renderSupersample >= 4 ? 2 : 1);
         ImGui::SetNextItemWidth(160);
         if (ImGui::Combo("Anti-alias (supersample)", &ssi, ss, 3)) g_set.renderSupersample = ssi == 0 ? 1 : (ssi == 1 ? 2 : 4);
-        UiResetToggle(g_set.renderSupersample, UiDefaults().renderSupersample);
+        UiReset(g_set.renderSupersample, UiDefaults().renderSupersample);
         ImGui::SetNextItemWidth(160);
         ImGui::SliderFloat("Source blur", &g_set.sourceBlur, 0.0f, 8.0f, "%.1f px");
-        UiResetSlider(g_set.sourceBlur, UiDefaults().sourceBlur);
+        UiReset(g_set.sourceBlur, UiDefaults().sourceBlur);
         if (g_set.sourceBlur > 0.05f) {
             ImGui::Checkbox("Blur affects waveform extents", &g_set.blurExtents);
-            UiResetToggle(g_set.blurExtents, UiDefaults().blurExtents);
+            UiReset(g_set.blurExtents, UiDefaults().blurExtents);
         }
         ImGui::Checkbox("Show FPS", &g_set.showFps);
-        UiResetToggle(g_set.showFps, UiDefaults().showFps);
+        UiReset(g_set.showFps, UiDefaults().showFps);
         ImGui::SetNextItemWidth(160);
         ImGui::SliderInt("FPS limit (0=vsync)", &g_set.fpsLimit, 0, 240);
-        UiResetSlider(g_set.fpsLimit, UiDefaults().fpsLimit);
+        UiReset(g_set.fpsLimit, UiDefaults().fpsLimit);
         ImGui::Checkbox("UI follows Windows SDR white", &g_set.uiFollowSdrWhite);
-        UiResetToggle(g_set.uiFollowSdrWhite, UiDefaults().uiFollowSdrWhite);
+        UiReset(g_set.uiFollowSdrWhite, UiDefaults().uiFollowSdrWhite);
         ImGui::Checkbox("Hover probe markers", &g_set.showHoverProbe);
-        UiResetToggle(g_set.showHoverProbe, UiDefaults().showHoverProbe);
+        UiReset(g_set.showHoverProbe, UiDefaults().showHoverProbe);
         ImGui::SameLine(); ImGui::SetNextItemWidth(70);
         ImGui::SliderFloat("Size", &g_set.hoverCircleRadius, 3.0f, 24.0f, "%.0f");
-        UiResetSlider(g_set.hoverCircleRadius, UiDefaults().hoverCircleRadius);
-        ImGui::Checkbox("Hover readout (top)", &g_set.showHoverReadout);
-        UiResetToggle(g_set.showHoverReadout, UiDefaults().showHoverReadout);
+        UiReset(g_set.hoverCircleRadius, UiDefaults().hoverCircleRadius);
+        ImGui::Checkbox("Hover/peak readout (top)", &g_set.showHoverReadout);
+        UiReset(g_set.showHoverReadout, UiDefaults().showHoverReadout);
         ImGui::SameLine(); ImGui::Checkbox("8-bit SDR", &g_set.showSdr8bit);
-        UiResetToggle(g_set.showSdr8bit, UiDefaults().showSdr8bit);
+        UiReset(g_set.showSdr8bit, UiDefaults().showSdr8bit);
         if (g_set.showHoverReadout) {
             ImGui::Checkbox("Readout background", &g_set.readoutBg);
-            UiResetToggle(g_set.readoutBg, UiDefaults().readoutBg);
+            UiReset(g_set.readoutBg, UiDefaults().readoutBg);
         }
         ImGui::Checkbox("Nit value at cursor", &g_set.showCursorNits);
-        UiResetToggle(g_set.showCursorNits, UiDefaults().showCursorNits);
+        UiReset(g_set.showCursorNits, UiDefaults().showCursorNits);
     }
 
     if (ImGui::CollapsingHeader("Graticule", ImGuiTreeNodeFlags_DefaultOpen)) {
         // (no right-click reset on the swatch: ColorEdit owns that gesture)
         ImGui::ColorEdit3("Color", &g_set.graticuleColor.x, ImGuiColorEditFlags_NoInputs);
         ImGui::SliderFloat("Opacity", &g_set.graticuleOpacity, 0.0f, 1.0f);
-        UiResetSlider(g_set.graticuleOpacity, UiDefaults().graticuleOpacity);
+        UiReset(g_set.graticuleOpacity, UiDefaults().graticuleOpacity);
     }
 
     int count = (int)g_set.layout;
@@ -226,6 +228,9 @@ static void DrawControlsWindow(float btnX, float btnY) {
             def.wndShow = g_set.wndShow; def.outputIndex = g_set.outputIndex;
             g_set = def;
         }
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("Tip: right-click any individual setting to reset just that one to its default.");
+        ImGui::PopTextWrapPos();
     }
 
     ImGui::PopStyleColor(3);

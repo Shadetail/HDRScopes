@@ -183,7 +183,7 @@ void HistogramScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& 
 void HistogramScope::DrawControls(Settings& s) {
     const char* modes[] = { "LRGB rows", "Overlay RGB", "Luma" };
     ImGui::SetNextItemWidth(160); ImGui::Combo("Mode", &s.histoMode, modes, 3);
-    UiResetToggle(s.histoMode, UiDefaults().histoMode);
+    UiReset(s.histoMode, UiDefaults().histoMode);
     if (s.histoMode == 1) {
         const char* names[3] = { "R", "G", "B" };
         const ImVec4 onCol[3] = { {0.9f,0.2f,0.2f,1}, {0.2f,0.85f,0.2f,1}, {0.3f,0.5f,1.0f,1} };
@@ -192,14 +192,14 @@ void HistogramScope::DrawControls(Settings& s) {
             ImVec4 c = s.histoChannelEnabled[i] ? onCol[i] : ImVec4(0.2f, 0.2f, 0.2f, 1);
             ImGui::PushStyleColor(ImGuiCol_Button, c); ImGui::PushStyleColor(ImGuiCol_ButtonHovered, c); ImGui::PushStyleColor(ImGuiCol_ButtonActive, c);
             if (ImGui::Button(names[i], ImVec2(26, 26))) s.histoChannelEnabled[i] = !s.histoChannelEnabled[i];
-            UiResetToggle(s.histoChannelEnabled[i], true);
+            UiReset(s.histoChannelEnabled[i], true);
             ImGui::PopStyleColor(3); ImGui::PopID(); if (i < 2) ImGui::SameLine();
         }
     }
     // Colorize only affects the overlay renderer; hide it in the other modes.
     if (s.histoMode == 1) {
         ImGui::Checkbox("Colorize", &s.histoColorize);
-        UiResetToggle(s.histoColorize, UiDefaults().histoColorize);
+        UiReset(s.histoColorize, UiDefaults().histoColorize);
     }
     // Friendly 0..100 brightness, log-mapped to gain (wide range, low default).
     const float gmin = 2e-6f, gmax = 1e-3f;
@@ -209,9 +209,9 @@ void HistogramScope::DrawControls(Settings& s) {
     ImGui::SetNextItemWidth(180);
     if (ImGui::SliderInt("Brightness", &bri, 0, 100))
         s.histoGain = std::pow(10.0f, lg + (bri / 100.0f) * (hg - lg));
-    UiResetSlider(s.histoGain, UiDefaults().histoGain);
+    UiReset(s.histoGain, UiDefaults().histoGain);
     ImGui::Checkbox("Zoom to SDR white", &s.histoSdrWhiteZoom);
-    UiResetToggle(s.histoSdrWhiteZoom, UiDefaults().histoSdrWhiteZoom);
+    UiReset(s.histoSdrWhiteZoom, UiDefaults().histoSdrWhiteZoom);
 }
 
 void HistogramScope::Shutdown() {

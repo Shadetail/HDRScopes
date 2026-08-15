@@ -73,24 +73,24 @@ void VectorScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s) 
 
 void VectorScope::DrawControls(Settings& s) {
     ImGui::SliderFloat("Brightness", &s.vectorGain, 0.00005f, 1.0f, "%.5f", ImGuiSliderFlags_Logarithmic);
-    UiResetSlider(s.vectorGain, UiDefaults().vectorGain);
+    UiReset(s.vectorGain, UiDefaults().vectorGain);
     ImGui::SliderFloat("Scale", &s.vectorScale, 0.06f, 1.0f, "%.2f");
-    UiResetSlider(s.vectorScale, UiDefaults().vectorScale);
+    UiReset(s.vectorScale, UiDefaults().vectorScale);
     ImGui::Checkbox("Colorize", &s.vectorColorize);
-    UiResetToggle(s.vectorColorize, UiDefaults().vectorColorize);
+    UiReset(s.vectorColorize, UiDefaults().vectorColorize);
     ImGui::SliderInt("Dot size", &s.chromaDotRadius, 0, 6);
-    UiResetSlider(s.chromaDotRadius, UiDefaults().chromaDotRadius);
+    UiReset(s.chromaDotRadius, UiDefaults().chromaDotRadius);
     ImGui::Checkbox("Extents (gamut outline)", &s.vectorExtents);
-    UiResetToggle(s.vectorExtents, UiDefaults().vectorExtents);
+    UiReset(s.vectorExtents, UiDefaults().vectorExtents);
     if (s.vectorExtents) {
         ImGui::SameLine(); ImGui::SetNextItemWidth(110);
         ImGui::SliderFloat("##exop", &s.vectorExtentsOpacity, 0.0f, 1.0f, "opacity %.2f");
-        UiResetSlider(s.vectorExtentsOpacity, UiDefaults().vectorExtentsOpacity);
+        UiReset(s.vectorExtentsOpacity, UiDefaults().vectorExtentsOpacity);
     }
     ImGui::Checkbox("Skin tone line", &s.vectorShowSkin);
-    UiResetToggle(s.vectorShowSkin, UiDefaults().vectorShowSkin);
+    UiReset(s.vectorShowSkin, UiDefaults().vectorShowSkin);
     if (s.vectorShowSkin) {
         ImGui::SliderFloat("Skin angle", &s.vectorSkinAngleDeg, 90.0f, 160.0f, "%.1f deg");
-        UiResetSlider(s.vectorSkinAngleDeg, UiDefaults().vectorSkinAngleDeg);
+        UiReset(s.vectorSkinAngleDeg, UiDefaults().vectorSkinAngleDeg);
     }
 }
