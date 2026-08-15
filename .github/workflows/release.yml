@@ -1,0 +1,36 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $stage = "HDRScopes-${{ github.ref_name }}-win64"
+          New-Item -ItemType Directory "$stage/shaders" -Force | Out-Null
+          Copy-Item build/Release/HDRScopes.exe $stage/
+          Copy-Item shaders/*.hlsl, shaders/*.hlsli "$stage/shaders/"
+          Copy-Item LICENSE, THIRD_PARTY_NOTICES.md $stage/
+          Compress-Archive -Path $stage -DestinationPath "$stage.zip"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.zip"
+          generate_release_notes: true

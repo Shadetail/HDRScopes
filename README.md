@@ -1,65 +1,124 @@
+<img align="right" width="110" src="docs/img/icon.png" alt="HDRScopes icon">
+
 # HDRScopes
 
-Real-time video scopes for the **live Windows HDR** signal (DaVinci/Nobe-style, but
-for the actual Windows HDR output that Nobe can't read). Waveform · Histogram ·
-Vectorscope · CIE Chromaticity, in a single sleek window.
+**Real-time video scopes for the live Windows HDR signal.**
+Waveform · Histogram · Vectorscope · CIE Chromaticity — reading the actual
+scRGB FP16 pixels Windows composites to your display.
 
-## Stack
-C++20 / DX11 / Dear ImGui (1.90.6, vendored clean in `third_party/imgui`). Captures
-the desktop via DXGI Desktop Duplication as **scRGB FP16** (linear Rec.709, 1.0 = 80
-nits). Color math lifted from SKIV's `colorspaces.hlsli`. Shaders compiled at runtime
-from `shaders/` (path baked in via `HDRSCOPES_SHADER_DIR`) — editing a `.hlsl` needs
-no rebuild.
+[![Release](https://img.shields.io/github/v/release/Shadetail/HDRScopes)](https://github.com/Shadetail/HDRScopes/releases/latest)
+[![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
+[![Build](https://github.com/Shadetail/HDRScopes/actions/workflows/build.yml/badge.svg)](https://github.com/Shadetail/HDRScopes/actions/workflows/build.yml)
 
-## Build
+Traditional scopes live inside an NLE and only see that app's own timeline.
+HDRScopes instead captures the Windows desktop itself (DXGI Desktop
+Duplication, scRGB FP16 — the real composited HDR signal), so it can measure
+what nothing else can: games, video players, YouTube in a browser, your own
+code, another grading app, or the desktop as a whole. If Windows draws it in
+HDR, HDRScopes can put it on a scope — live, at ~110 FPS for a 4K capture.
+
+<!-- HERO SHOT (Mario): full window, waveform on pretty HDR content with
+     specular peaks punching above a reference line. Save as docs/img/hero.png
+     and uncomment:
+<p align="center"><img src="docs/img/hero.png" alt="HDRScopes waveform of live HDR content"></p>
+-->
+
+## Scopes
+
+<img align="right" width="300" src="docs/img/vectorscope.png" alt="ICtCp vectorscope, BT.2020 sweep">
+
+- **Waveform** — per-column PQ-nit histogram over a fixed 0–10,000 nit log
+  axis. Luminance or RGB mode, optional colorize, extents display (colored
+  points or a supersampled 1-px envelope line), draggable custom reference
+  lines, and an SDR-white vertical-zoom mode that pins the axis top to the
+  current Windows SDR-white level.
+- **Histogram** — pixel count per nit bin: stacked L/R/G/B bands, overlaid
+  RGB, or luma only.
+- **Vectorscope** — ICtCp chroma with primary/secondary targets and a
+  skin-tone line *(pictured: a BT.2020 saturation sweep)*.
+- **CIE Chromaticity** — 1931 xy or 1976 u′v′, with the spectral locus,
+  Rec.709 / P3 / Rec.2020 gamut triangles, and the D65 white point.
+
+Layouts: single scope, 2-up, or 4-up, each panel with its own scope choice and
+settings. Hover any pixel of the captured screen and each scope marks where
+that pixel lands (white = luminance, R/G/B circles), with a nit readout at the
+cursor.
+
+## Download
+
+Grab the latest zip from **[Releases](https://github.com/Shadetail/HDRScopes/releases/latest)**,
+unzip anywhere, run `HDRScopes.exe`. No installer, no dependencies, no
+telemetry. Settings persist to `%LOCALAPPDATA%\HDRScopes\settings.ini`.
+
+> **SmartScreen note:** Windows may warn on first launch because the exe is
+> new and unsigned (normal for small open-source tools). *More info → Run
+> anyway.* If you'd rather not trust a prebuilt exe, building from source
+> takes two commands — see below.
+
+**Requirements:** Windows 10 (1809+) or Windows 11 · any DX11-capable GPU ·
+an HDR-enabled display for meaningful readings (the app runs on SDR outputs,
+but the captured values won't represent an HDR signal).
+
+## Usage
+
+<img align="right" width="300" src="docs/img/controls.png" alt="Controls popup">
+
+- **Controls** (top-right button) opens the settings popup: capture source
+  (monitor / window / dragged screen region), quality, and per-panel scope
+  options.
+- **Layouts** — the `1 / 2 / 4` buttons switch layout presets; each panel has
+  a scope picker.
+- **Navigate** — mouse-wheel zoom (to cursor), middle-drag pan, click the
+  bottom-left zoom readout to reset.
+- **Reference lines** — add draggable horizontal nit markers on the waveform
+  (log-scaled drag, `Shift` = finer).
+- **Quality** — presets from Low to Per-pixel trade bin-grid and sample
+  density for speed; optional bilinear source downsample suppresses
+  nearest-sampling noise; optional FPS limiter.
+- The UI is drawn at the Windows SDR-white brightness on HDR outputs, while
+  the scope traces keep their true HDR nit values.
+
+## Known limitations
+
+- No parade scope yet.
+- Vectorscope graticule target positions and the skin-tone line are
+  approximations.
+- RGB undershoots below 0 nits clamp to the bottom of the waveform rather
+  than rendering below the 0-line.
+- DRM-protected content (Netflix and friends) captures as black — that's
+  Windows working as intended, not a bug.
+
+## Building from source
+
+Visual Studio 2022 (or Build Tools) + CMake:
+
 ```powershell
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 ```
-Output: `build/Release/HDRScopes.exe`. Settings persist to
-`%LOCALAPPDATA%\HDRScopes\settings.ini` (plus window placement).
 
-## Scopes
-- **Waveform** — per-column PQ-nit histogram over a fixed 0–10,000 nit axis. Luminance
-  or RGB (with R/G/B toggle squares), colorize, extents (colored points or a 1px white
-  envelope line, optionally supersampled), custom reference lines (draggable, log drag,
-  Shift = finer, global thickness), and an SDR-white vertical-zoom mode that maps the
-  axis top to the current Windows SDR-white level.
-- **Histogram** — pixel count per nit bin: LRGB (4 stacked bands), overlaid RGB, or luma.
-- **Vectorscope** — ICtCp chroma with primary/secondary targets and a skin-tone line.
-- **CIE Chromaticity** — 1931 xy or 1976 u'v', with the spectral locus and Rec.709 /
-  P3 / Rec.2020 gamut triangles + D65.
+Output: `build/Release/HDRScopes.exe` (static CRT, fully self-contained).
+Shaders compile at runtime, so `.hlsl` edits apply on relaunch with no
+rebuild. Architecture notes live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## UI
-Single full-window scope area; **Controls** button (top-right) opens the settings popup;
-layout presets **1 / 2 / 4-up** (top-right) with a per-panel scope picker; **FPS**
-(toggle) bottom-right; **zoom** bottom-left (click to reset). Zoom-to-mouse (wheel),
-middle-drag pan. Hover any pixel on the captured screen to mark where it lands on each
-scope (white = luminance, R/G/B circles). The ImGui UI is drawn at the Windows SDR-white
-brightness on HDR outputs while the scope graphs keep their true HDR nit values.
+## License & credits
 
-## Quality & performance
-Quality presets Low → Per-pixel control the bin grid and source sample density; optional
-**bilinear source downsample** suppresses nearest-sampling noise. Optional FPS limiter.
-~110 FPS capturing live 4K HDR at High.
+GPLv3 — see [LICENSE](LICENSE). Third-party components are MIT-licensed; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## Architecture
-`CaptureSource` (DDA) → `IScope::Compute` (compute pass into a uint bin texture) →
-`IScope::Render` (render-side resolve into an offscreen RT) → `ScopePanel` (HDR-preserving
-image draw + `DrawOverlay` graticule/labels/probe). `ScopeFactory` + `ScopePanel` host
-the 1/2/4-up layout. `util/Settings` persists everything; `util/SdrWhite` queries the
-Windows SDR-white level; `util/PQ.h` mirrors the HLSL PQ math on the CPU for the overlays.
+- Color-space conversion HLSL adapted from
+  [SKIV](https://github.com/SpecialKO/SKIV) by Andon "Kaldaien" Coleman and
+  Aemony (MIT) — thank you.
+- UI built on [Dear ImGui](https://github.com/ocornut/imgui) (MIT).
+- Scope behavior is modeled on the industry-standard scopes in DaVinci
+  Resolve and validated against them where possible.
+- Developed in close AI pair-programming with Anthropic's Claude — the scope
+  design, color-science decisions, and validation are human.
 
-## Key gotcha
-`IDXGIOutput5::DuplicateOutput1` returns `DXGI_ERROR_UNSUPPORTED` unless the process is
-**per-monitor DPI aware** (`SetProcessDpiAwarenessContext` at startup).
+## Support
 
-## Notes / deferred
-- Parade scope is not yet implemented (the picker entry currently maps to Waveform).
-- Vectorscope target positions / skin-tone line are approximations.
-- Sub-0 (undershoot) RGB excursions clamp to the bottom bin rather than rendering below
-  the 0-line.
-- Protected/DRM content captures black; a region on an SDR output reads meaningless —
-  both documented-as-acceptable.
-- Superseded dead files from v1 (`src/compute/Waveform.*`, `src/render/GraphView.*`,
-  `src/render/Graticule.h`, `shaders/graph.hlsl`) are kept out of the build.
+Bug reports and feature requests are welcome in
+[Issues](https://github.com/Shadetail/HDRScopes/issues) — this is a hobby
+project, so support is best-effort. If HDRScopes is useful to you, a star
+helps others find it, and sponsorship (button up top) is appreciated but
+never expected.
