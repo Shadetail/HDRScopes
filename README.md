@@ -135,5 +135,6 @@ GPLv3 — see [LICENSE](LICENSE). Third-party components are MIT-licensed; see
 Bug reports and feature requests are welcome in
 [Issues](https://github.com/Shadetail/HDRScopes/issues) — this is a hobby
 project, so support is best-effort. If HDRScopes is useful to you, a star
-helps others find it, and sponsorship (button up top) is appreciated but
-never expected.
+helps others find it, and a donation via
+[Ko-fi](https://ko-fi.com/shadetaileagleshadow) or the Sponsor button up top
+is appreciated but never expected.
