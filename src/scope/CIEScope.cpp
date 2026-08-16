@@ -1,6 +1,9 @@
 #include "scope/CIEScope.h"
 #include "scope/ChromaMath.h"
 #include "util/UiReset.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <vector>
 
 namespace {
@@ -21,6 +24,40 @@ const double kLocus[][2] = {
     {0.7334,0.2666},{0.7340,0.2660},{0.7344,0.2656},{0.7347,0.2653},
 };
 struct Tri { double r[2], g[2], b[2]; ImU32 col; const char* name; };
+
+// Densify the locus with a centripetal Catmull-Rom spline (Barry-Goldman
+// form). The 5nm table is exact but its chords show where chromaticity sweeps
+// fast per wavelength (the cyan-green upper-left edge); interpolating keeps
+// every table point and curves smoothly between them. Built once at startup.
+std::vector<std::array<double, 2>> BuildSmoothLocus() {
+    using P2 = std::array<double, 2>;
+    const int n = (int)(sizeof(kLocus) / sizeof(kLocus[0]));
+    const int K = 16;  // subdivisions per segment (keeps joints sub-degree even zoomed)
+    auto P = [&](int i) { i = std::clamp(i, 0, n - 1); return P2{ kLocus[i][0], kLocus[i][1] }; };
+    auto dist = [](const P2& a, const P2& b) { return std::hypot(a[0] - b[0], a[1] - b[1]); };
+    auto lerp = [](const P2& a, const P2& b, double u) { return P2{ a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u }; };
+    std::vector<P2> out;
+    out.reserve((size_t)(n - 1) * K + 1);
+    for (int i = 0; i + 1 < n; ++i) {
+        P2 p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+        double t0 = 0;
+        double t1 = t0 + std::sqrt(dist(p0, p1));  // centripetal: alpha = 0.5
+        double t2 = t1 + std::sqrt(dist(p1, p2));
+        double t3 = t2 + std::sqrt(dist(p2, p3));
+        if (t2 - t1 < 1e-9) { out.push_back(p1); continue; }  // duplicate point
+        for (int k = 0; k < K; ++k) {
+            double t = t1 + (t2 - t1) * k / K;
+            P2 A1 = (t1 - t0 > 1e-9) ? lerp(p0, p1, (t - t0) / (t1 - t0)) : p1;
+            P2 A2 = lerp(p1, p2, (t - t1) / (t2 - t1));
+            P2 A3 = (t3 - t2 > 1e-9) ? lerp(p2, p3, (t - t2) / (t3 - t2)) : p2;
+            P2 B1 = (t2 - t0 > 1e-9) ? lerp(A1, A2, (t - t0) / (t2 - t0)) : A2;
+            P2 B2 = (t3 - t1 > 1e-9) ? lerp(A2, A3, (t - t1) / (t3 - t1)) : A2;
+            out.push_back(lerp(B1, B2, (t - t1) / (t2 - t1)));
+        }
+    }
+    out.push_back(P(n - 1));
+    return out;
+}
 }
 
 // xy -> plot[0,1]^2 matching the shader's MapPoint for the active diagram.
@@ -42,10 +79,11 @@ void CIEScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s) {
     const ImU32 col = ImGui::GetColorU32(ImVec4(s.graticuleColor.x, s.graticuleColor.y, s.graticuleColor.z, s.graticuleOpacity * 0.8f));
     const ImU32 colText = ImGui::GetColorU32(ImVec4(0.82f, 0.82f, 0.82f, std::max(0.5f, s.graticuleOpacity)));
 
-    // Spectral locus (closed with the line of purples).
-    const int n = (int)(sizeof(kLocus) / sizeof(kLocus[0]));
-    std::vector<ImVec2> loc; loc.reserve(n + 1);
-    for (int i = 0; i < n; ++i) loc.push_back(XY(kLocus[i][0], kLocus[i][1]));
+    // Spectral locus, spline-densified (closed with the straight line of
+    // purples, which is a real straight edge and must not be smoothed).
+    static const std::vector<std::array<double, 2>> kSmooth = BuildSmoothLocus();
+    std::vector<ImVec2> loc; loc.reserve(kSmooth.size() + 1);
+    for (const auto& p : kSmooth) loc.push_back(XY(p[0], p[1]));
     loc.push_back(loc.front());
     dl->AddPolyline(loc.data(), (int)loc.size(), col, 0, 1.0f);
 

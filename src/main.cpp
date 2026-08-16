@@ -458,8 +458,8 @@ static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float s
 
 // Quad-cell width that panel i's fixed-aspect scope (vectorscope/CIE) can
 // actually use at the given cell height — its graph plus label margins. 0 for
-// stretchy scopes that take whatever width they get (and before the panel's
-// scope exists, which keeps the split centered for that first frame).
+// stretchy scopes that take whatever width they get (and if the scope failed
+// to create, which keeps the split centered).
 static float IdealCellW(int i, float cellH, const Settings& s) {
     IScope* sc = g_panels[i].Scope();
     float aspect = sc ? sc->AspectRatio() : 0.0f;
@@ -675,6 +675,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         // Never below 50% for the stretchy column (narrow windows stay 50/50).
         float splitX = -1.0f;
         if (count == 4) {
+            // Materialize any scope-type changes now so the split is computed
+            // from the scopes actually drawn this frame (no one-frame lag).
+            for (int i = 0; i < count; ++i) g_panels[i].EnsureScope(g_set.panelScope[i]);
             const float pad = 2.0f;  // matches LayoutRects
             float cellH = (area1.y - scopeArea0.y) * 0.5f - pad;
             auto colWidth = [&](int a, int b) {  // widest ideal width; 0 = has a stretchy panel

@@ -11,6 +11,11 @@ class ScopePanel {
 public:
     void Init(ID3D11Device* device) { device_ = device; }
 
+    // (Re)create the scope instance if the wanted type changed. Called by
+    // Draw, and by the host before layout so geometry queries (margins,
+    // aspect) already see the newly selected scope in the same frame.
+    void EnsureScope(ScopeType want);
+
     // panelP0/P1: the ImGui screen rect allotted to this panel.
     // index: which Settings.zoom/pan slot + panelScope entry to use.
     void Draw(int index, const ImVec2& panelP0, const ImVec2& panelP1,

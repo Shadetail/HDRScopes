@@ -6,6 +6,9 @@ so every release ships with a readable summary.
 
 ## v1.0.3 — 2026-08-16
 
+- CIE: the spectral-locus horseshoe is drawn as a smooth spline through the
+  5 nm table instead of showing straight chords on its fast-sweeping
+  cyan-green edge.
 - 4-scope layout: when one column holds only the square scopes (vectorscope,
   CIE) and the other only the stretchy ones (waveform, histogram), the
   vertical split now shifts automatically so the square column is exactly as

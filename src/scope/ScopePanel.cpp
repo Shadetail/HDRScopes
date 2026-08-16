@@ -4,16 +4,18 @@
 #include <algorithm>
 #include <cmath>
 
+void ScopePanel::EnsureScope(ScopeType want) {
+    if (scope_ && type_ == want) return;
+    if (scope_) scope_->Shutdown();
+    scope_ = CreateScope(want);
+    if (scope_ && !scope_->Init(device_)) scope_.reset();
+    type_ = want;
+}
+
 void ScopePanel::Draw(int index, const ImVec2& panelP0, const ImVec2& panelP1,
                       const ScopeInput& input, Settings& s, float sdrWhiteNits,
                       const ScopeFrame& probe, float uiBrightness) {
-    ScopeType want = s.panelScope[index];
-    if (!scope_ || type_ != want) {
-        if (scope_) scope_->Shutdown();
-        scope_ = CreateScope(want);
-        if (scope_ && !scope_->Init(device_)) scope_.reset();
-        type_ = want;
-    }
+    EnsureScope(s.panelScope[index]);
     if (!scope_) return;
     if (!input.srcSRV || input.srcW == 0 || input.srcH == 0 || input.cropW <= 0 || input.cropH <= 0) return;
 
