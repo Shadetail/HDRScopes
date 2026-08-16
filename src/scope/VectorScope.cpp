@@ -96,6 +96,7 @@ void VectorScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s) 
 }
 
 void VectorScope::DrawControls(Settings& s) {
+    const float u = UiScale();
     int enc = s.vectorPQ ? 1 : 0;
     if (ImGui::Combo("Encoding", &enc, "Rec.709 (SDR)\0PQ (HDR)\0")) s.vectorPQ = (enc == 1);
     UiReset(s.vectorPQ, UiDefaults().vectorPQ);
@@ -130,7 +131,7 @@ void VectorScope::DrawControls(Settings& s) {
     UiTip("Outline the outermost chroma excursions - the source's actual color "
           "footprint - even where the trace is too faint to see.");
     if (s.vectorExtents) {
-        ImGui::SameLine(); ImGui::SetNextItemWidth(110);
+        ImGui::SameLine(); ImGui::SetNextItemWidth(110 * u);
         ImGui::SliderFloat("##exop", &s.vectorExtentsOpacity, 0.0f, 1.0f, "opacity %.2f");
         UiReset(s.vectorExtentsOpacity, UiDefaults().vectorExtentsOpacity);
     }

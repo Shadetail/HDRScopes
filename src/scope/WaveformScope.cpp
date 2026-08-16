@@ -262,6 +262,7 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
     const float top = f.graphP0.y, bot = f.graphP1.y;
     const float left = f.graphP0.x, right = f.graphP1.x;
     const float graphW = right - left, graphH = bot - top;
+    const float u = UiScale();
     auto inRange = [&](float y) { return y >= top - 0.5f && y <= bot + 0.5f; };
 
     const ImVec4 gc = ImVec4(s.graticuleColor.x, s.graticuleColor.y, s.graticuleColor.z, s.graticuleOpacity);
@@ -284,7 +285,7 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
         for (int m = 2; m <= 9; ++m) {
             double n = dec * m; if (n > 10000.0) break;
             float my = NitsToScreenY(n, f, s);
-            if (inRange(my)) dl->AddLine(ImVec2(left - 20.0f, my), ImVec2(left, my), colMinor, 1.0f);
+            if (inRange(my)) dl->AddLine(ImVec2(left - 20.0f * u, my), ImVec2(left, my), colMinor, 1.0f);
         }
     }
 
@@ -298,7 +299,7 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
         else               snprintf(lab, sizeof(lab), "%g", dec);
         ImVec2 ts = ImGui::CalcTextSize(lab);
         float ly = std::max(y - ts.y * 0.5f, top);
-        dl->AddText(ImVec2(left - 4.0f - ts.x, ly), colText, lab);
+        dl->AddText(ImVec2(left - 4.0f * u - ts.x, ly), colText, lab);
     }
 
     // Extents white envelope line (style 1).
@@ -347,9 +348,9 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
         // Label sits inside the plot at the left edge, matching the graticule
         // labels' side (those live outside; keeping this inside avoids overlap).
         char lab[32]; snprintf(lab, sizeof(lab), "%.0f", s.refLines[i].nits);
-        dl->AddText(ImVec2(left + 6.0f, y - 14.0f), col, lab);
+        dl->AddText(ImVec2(left + 6.0f * u, y - ImGui::GetFontSize() - 1.0f * u), col, lab);
 
-        if (hovered && io.MouseClicked[0] && fabsf(io.MousePos.y - y) < 5.0f) draggingRef_ = (int)i;
+        if (hovered && io.MouseClicked[0] && fabsf(io.MousePos.y - y) < 5.0f * u) draggingRef_ = (int)i;
     }
     if (draggingRef_ >= 0) {
         if (io.MouseDown[0] && draggingRef_ < (int)s.refLines.size())
@@ -362,8 +363,8 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
         char lab[32];
         FormatNits(std::clamp(ScreenYToNits(io.MousePos.y, f, s), 0.0, 10000.0), lab, sizeof(lab));
         ImVec2 ts = ImGui::CalcTextSize(lab);
-        ImVec2 tp(io.MousePos.x + 14.0f, io.MousePos.y - ts.y * 0.5f);
-        if (tp.x + ts.x > right) tp.x = io.MousePos.x - ts.x - 10.0f;
+        ImVec2 tp(io.MousePos.x + 14.0f * u, io.MousePos.y - ts.y * 0.5f);
+        if (tp.x + ts.x > right) tp.x = io.MousePos.x - ts.x - 10.0f * u;
         tp.y = std::clamp(tp.y, top, bot - ts.y);
         dl->AddText(ImVec2(tp.x + 1, tp.y + 1), IM_COL32(0, 0, 0, 200), lab);
         dl->AddText(tp, IM_COL32(235, 235, 235, 230), lab);
@@ -393,6 +394,7 @@ void WaveformScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s
 }
 
 void WaveformScope::DrawControls(Settings& s) {
+    const float u = UiScale();
     ImGui::RadioButton("Luminance", &s.waveMode, 0);
     UiReset(s.waveMode, UiDefaults().waveMode);
     UiTip("One trace of overall brightness (luminance) per column."); ImGui::SameLine();
@@ -411,7 +413,7 @@ void WaveformScope::DrawControls(Settings& s) {
             ImGui::PushStyleColor(ImGuiCol_Button, c);
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, c);
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, c);
-            if (ImGui::Button(names[i], ImVec2(26, 26))) s.channelEnabled[i] = !s.channelEnabled[i];
+            if (ImGui::Button(names[i], ImVec2(26 * u, 26 * u))) s.channelEnabled[i] = !s.channelEnabled[i];
             UiReset(s.channelEnabled[i], true);
             ImGui::PopStyleColor(3); ImGui::PopID();
             if (i < 2) ImGui::SameLine();
@@ -428,7 +430,7 @@ void WaveformScope::DrawControls(Settings& s) {
           "trace is too faint to see - as colored points or a thin envelope line.");
     if (s.waveExtents) {
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(150);
+        ImGui::SetNextItemWidth(150 * u);
         const char* styles[] = { "Colored points", "White envelope line" };
         ImGui::Combo("##extstyle", &s.waveExtentsStyle, styles, 2);
         UiReset(s.waveExtentsStyle, UiDefaults().waveExtentsStyle);
@@ -440,7 +442,7 @@ void WaveformScope::DrawControls(Settings& s) {
             UiTip("Read every source pixel for the extents even when Quality samples "
                   "a coarser grid, so single-pixel peaks can't slip through.");
         }
-        ImGui::SetNextItemWidth(150);
+        ImGui::SetNextItemWidth(150 * u);
         ImGui::SliderFloat("Extents opacity", &s.waveExtentsOpacity, 0.0f, 1.0f, "%.2f");
         UiReset(s.waveExtentsOpacity, UiDefaults().waveExtentsOpacity);
     }
@@ -457,17 +459,17 @@ void WaveformScope::DrawControls(Settings& s) {
     UiTip("Smooth the trace across neighboring columns (Resolve-style low pass): "
           "exposure bands become easier to read, single-column spikes fade.");
     if (s.lowPass) {
-        ImGui::SameLine(); ImGui::SetNextItemWidth(120);
+        ImGui::SameLine(); ImGui::SetNextItemWidth(120 * u);
         ImGui::SliderFloat("Strength##lpa", &s.lowPassAmount, 0.0f, 1.0f, "%.2f");
         UiReset(s.lowPassAmount, UiDefaults().lowPassAmount);
     }
 
     // Reference lines: custom count, log drag (shift = 10x finer), thickness.
     ImGui::SeparatorText("Reference lines");
-    ImGui::SetNextItemWidth(120);
+    ImGui::SetNextItemWidth(120 * u);
     ImGui::SliderFloat("Thickness", &s.refLineThickness, 1.0f, 6.0f, "%.1f px");
     UiReset(s.refLineThickness, UiDefaults().refLineThickness);
-    ImGui::SetNextItemWidth(120);
+    ImGui::SetNextItemWidth(120 * u);
     ImGui::SliderFloat("Opacity##ref", &s.refLineOpacity, 0.0f, 1.0f, "%.2f");
     UiReset(s.refLineOpacity, UiDefaults().refLineOpacity);
     ImGuiIO& io = ImGui::GetIO();
@@ -481,7 +483,7 @@ void WaveformScope::DrawControls(Settings& s) {
         ImGui::SameLine();
         float v = (float)s.refLines[i].nits;
         float speed = io.KeyShift ? 0.02f : 0.5f; // hold Shift for 10x-finer control
-        ImGui::SetNextItemWidth(150);
+        ImGui::SetNextItemWidth(150 * u);
         if (ImGui::DragFloat("nits", &v, speed, 0.0f, 10000.0f, "%.2f", ImGuiSliderFlags_Logarithmic))
             s.refLines[i].nits = std::clamp((double)v, 0.0, 10000.0);
         UiReset(s.refLines[i].nits, defaultRef.nits);

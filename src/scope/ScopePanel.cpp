@@ -1,5 +1,6 @@
 #include "scope/ScopePanel.h"
 #include "scope/ScopeFactory.h"
+#include "util/UiReset.h"
 #include <algorithm>
 #include <cmath>
 
@@ -19,10 +20,12 @@ void ScopePanel::Draw(int index, const ImVec2& panelP0, const ImVec2& panelP1,
     // Compute the histogram for this frame.
     scope_->Compute(input, s);
 
-    // Lay out the graph rect inside the panel (reserve margins).
+    // Lay out the graph rect inside the panel (reserve margins). Scopes return
+    // margins in 1x px; scale here so label room tracks the UI scale.
     Margins m = scope_->GetMargins(s);
-    ImVec2 g0(panelP0.x + m.l, panelP0.y + m.t);
-    ImVec2 g1(panelP1.x - m.r, panelP1.y - m.b);
+    const float mu = UiScale();
+    ImVec2 g0(panelP0.x + m.l * mu, panelP0.y + m.t * mu);
+    ImVec2 g1(panelP1.x - m.r * mu, panelP1.y - m.b * mu);
     float gw = g1.x - g0.x, gh = g1.y - g0.y;
     float aspect = scope_->AspectRatio();
     if (aspect > 0.0f && gw > 0 && gh > 0) {

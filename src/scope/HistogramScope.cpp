@@ -124,6 +124,7 @@ double HistogramScope::ScreenXToNits(float x, const ScopeFrame& f, const Setting
 
 void HistogramScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s) {
     const float top = f.graphP0.y, bot = f.graphP1.y, left = f.graphP0.x, right = f.graphP1.x;
+    const float u = UiScale();
     const ImVec4 gc(s.graticuleColor.x, s.graticuleColor.y, s.graticuleColor.z, s.graticuleOpacity);
     const ImU32 colMajor = ImGui::GetColorU32(gc);
     const ImU32 colText = ImGui::GetColorU32(ImVec4(0.82f, 0.82f, 0.82f, std::max(0.5f, s.graticuleOpacity)));
@@ -137,7 +138,7 @@ void HistogramScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& 
         if (dec < 10000.0) for (int m = 2; m <= 9; ++m) {
             double n = dec * m; if (n > 10000.0) break;
             float mx = NitsToScreenX(n, f, s);
-            if (inX(mx)) dl->AddLine(ImVec2(mx, bot - 12.0f), ImVec2(mx, bot), colMajor, 1.0f);
+            if (inX(mx)) dl->AddLine(ImVec2(mx, bot - 12.0f * u), ImVec2(mx, bot), colMajor, 1.0f);
         }
     }
     dl->PopClipRect();
@@ -146,7 +147,7 @@ void HistogramScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& 
         char lab[16];
         if (dec >= 1000.0) snprintf(lab, sizeof(lab), "%gk", dec / 1000.0); else snprintf(lab, sizeof(lab), "%g", dec);
         ImVec2 ts = ImGui::CalcTextSize(lab);
-        dl->AddText(ImVec2(x - ts.x * 0.5f, bot + 4.0f), colText, lab);
+        dl->AddText(ImVec2(x - ts.x * 0.5f, bot + 4.0f * u), colText, lab);
     }
 
     // Nit value of the axis position under the cursor, attached to the cursor.
@@ -155,8 +156,8 @@ void HistogramScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& 
         char lab[32];
         FormatNits(std::clamp(ScreenXToNits(io.MousePos.x, f, s), 0.0, 10000.0), lab, sizeof(lab));
         ImVec2 ts = ImGui::CalcTextSize(lab);
-        ImVec2 tp(io.MousePos.x + 14.0f, io.MousePos.y - ts.y * 0.5f);
-        if (tp.x + ts.x > right) tp.x = io.MousePos.x - ts.x - 10.0f;
+        ImVec2 tp(io.MousePos.x + 14.0f * u, io.MousePos.y - ts.y * 0.5f);
+        if (tp.x + ts.x > right) tp.x = io.MousePos.x - ts.x - 10.0f * u;
         tp.y = std::clamp(tp.y, top, bot - ts.y);
         dl->AddText(ImVec2(tp.x + 1, tp.y + 1), IM_COL32(0, 0, 0, 200), lab);
         dl->AddText(tp, IM_COL32(235, 235, 235, 230), lab);
@@ -181,8 +182,9 @@ void HistogramScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& 
 }
 
 void HistogramScope::DrawControls(Settings& s) {
+    const float u = UiScale();
     const char* modes[] = { "LRGB rows", "Overlay RGB", "Luma" };
-    ImGui::SetNextItemWidth(160); ImGui::Combo("Mode", &s.histoMode, modes, 3);
+    ImGui::SetNextItemWidth(160 * u); ImGui::Combo("Mode", &s.histoMode, modes, 3);
     UiReset(s.histoMode, UiDefaults().histoMode);
     UiTip("LRGB rows: four stacked bands (luma, R, G, B). Overlay RGB: the channels "
           "drawn over each other in one band. Luma: a single luminance band.");
@@ -193,7 +195,7 @@ void HistogramScope::DrawControls(Settings& s) {
             ImGui::PushID(i + 100);
             ImVec4 c = s.histoChannelEnabled[i] ? onCol[i] : ImVec4(0.2f, 0.2f, 0.2f, 1);
             ImGui::PushStyleColor(ImGuiCol_Button, c); ImGui::PushStyleColor(ImGuiCol_ButtonHovered, c); ImGui::PushStyleColor(ImGuiCol_ButtonActive, c);
-            if (ImGui::Button(names[i], ImVec2(26, 26))) s.histoChannelEnabled[i] = !s.histoChannelEnabled[i];
+            if (ImGui::Button(names[i], ImVec2(26 * u, 26 * u))) s.histoChannelEnabled[i] = !s.histoChannelEnabled[i];
             UiReset(s.histoChannelEnabled[i], true);
             ImGui::PopStyleColor(3); ImGui::PopID(); if (i < 2) ImGui::SameLine();
         }
@@ -209,7 +211,7 @@ void HistogramScope::DrawControls(Settings& s) {
     float lg = std::log10(gmin), hg = std::log10(gmax);
     float t = (std::log10(std::clamp(s.histoGain, gmin, gmax)) - lg) / (hg - lg);
     int bri = (int)(t * 100.0f + 0.5f);
-    ImGui::SetNextItemWidth(180);
+    ImGui::SetNextItemWidth(180 * u);
     if (ImGui::SliderInt("Brightness", &bri, 0, 100))
         s.histoGain = std::pow(10.0f, lg + (bri / 100.0f) * (hg - lg));
     UiReset(s.histoGain, UiDefaults().histoGain);

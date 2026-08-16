@@ -84,8 +84,9 @@ void CIEScope::DrawOverlay(ImDrawList* dl, const ScopeFrame& f, Settings& s) {
 }
 
 void CIEScope::DrawControls(Settings& s) {
+    const float u = UiScale();
     const char* diags[] = { "xy (1931)", "u'v' (1976)" };
-    ImGui::SetNextItemWidth(150); ImGui::Combo("Diagram", &s.cieDiagram, diags, 2);
+    ImGui::SetNextItemWidth(150 * u); ImGui::Combo("Diagram", &s.cieDiagram, diags, 2);
     UiReset(s.cieDiagram, UiDefaults().cieDiagram);
     UiTip("xy (1931) is the classic horseshoe diagram; u'v' (1976) spaces colors "
           "more perceptually evenly.");
@@ -106,7 +107,7 @@ void CIEScope::DrawControls(Settings& s) {
     UiTip("Outline the outermost chromaticity excursions - the source's actual "
           "gamut footprint - even where the trace is too faint to see.");
     if (s.cieExtents) {
-        ImGui::SameLine(); ImGui::SetNextItemWidth(110);
+        ImGui::SameLine(); ImGui::SetNextItemWidth(110 * u);
         ImGui::SliderFloat("##exop", &s.cieExtentsOpacity, 0.0f, 1.0f, "opacity %.2f");
         UiReset(s.cieExtentsOpacity, UiDefaults().cieExtentsOpacity);
     }

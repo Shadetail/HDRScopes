@@ -65,6 +65,49 @@ float         g_uiSdrWhiteNits = 200.0f;  // window's monitor (UI brightness)
 ULONGLONG     g_lastSdrQuery = 0;
 HWND          g_pickedWindow = nullptr;
 ULONGLONG     g_pickArmUntil = 0;
+float         g_uiScaleOverride = -1.0f;  // HDRSCOPES_UISCALE env (testing)
+float         g_pendingUiScale = -1.0f;   // from WM_DPICHANGED; applied between frames
+bool          g_controlsRescale = false;  // snap the controls popup to the new scale
+}
+
+// Rebuild fonts and style for the given UI scale (window DPI / 96). The
+// default 13px bitmap font stays for 1x (pixel-crisp); above that we load
+// Consolas (ships with Windows) at the scaled size. Never call mid-frame.
+static void ApplyUiScale(float s) {
+    UiScale() = s;
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->Clear();
+    io.FontGlobalScale = 1.0f;
+    bool ttf = false;
+    if (s > 1.001f) {
+        char path[MAX_PATH];
+        UINT n = GetWindowsDirectoryA(path, MAX_PATH);
+        if (n > 0 && n < MAX_PATH - 20) {
+            strcat_s(path, "\\Fonts\\consola.ttf");
+            if (GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES)
+                ttf = io.Fonts->AddFontFromFileTTF(path, (float)(int)(13.0f * s + 0.5f)) != nullptr;
+        }
+    }
+    if (!ttf) {
+        io.Fonts->AddFontDefault();
+        // The default atlas is always 13px, so scale it in either direction.
+        // This also makes the documented 0.5..1.0 test overrides scale the font
+        // together with the style and explicitly-sized widgets.
+        io.FontGlobalScale = s;
+    }
+    ImGui_ImplDX11_InvalidateDeviceObjects();  // font atlas re-uploads next frame
+
+    // Fresh style then scale: ScaleAllSizes compounds, so never rescale in place.
+    ImGuiStyle st;
+    ImGui::StyleColorsDark(&st);
+    // Tooltips only appear once the mouse has been parked on a control for a
+    // moment, so they never flash by during ordinary use.
+    st.HoverFlagsForTooltipMouse = ImGuiHoveredFlags_Stationary | ImGuiHoveredFlags_DelayNormal;
+    st.HoverDelayNormal = 0.55f;
+    st.HoverStationaryDelay = 0.25f;
+    st.ScaleAllSizes(s);
+    ImGui::GetStyle() = st;
+    g_controlsRescale = true;  // ImGuiCond_FirstUseEver won't re-size it, so we do
 }
 
 static LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -73,6 +116,15 @@ static LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_SIZE:
         if (wp != SIZE_MINIMIZED) { g_resize = true; g_resizeW = (UINT)LOWORD(lp); g_resizeH = (UINT)HIWORD(lp); }
         return 0;
+    case WM_DPICHANGED: {
+        // Per-monitor-v2 windows must rescale themselves; adopt the suggested
+        // rect and rebuild the UI at the new scale between frames.
+        if (g_uiScaleOverride <= 0.0f) g_pendingUiScale = (float)LOWORD(wp) / 96.0f;
+        const RECT* r = (const RECT*)lp;
+        SetWindowPos(hwnd, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        return 0;
+    }
     case WM_DESTROY: PostQuitMessage(0); return 0;
     }
     return DefWindowProc(hwnd, msg, wp, lp);
@@ -88,10 +140,17 @@ static POINT DefaultCapturePoint() {
 // ---- controls popup ----------------------------------------------------------
 static void DrawControlsWindow(float btnX, float btnY) {
     if (!g_showControls) return;
-    const float w = 380.0f;
-    ImGui::SetNextWindowSize(ImVec2(w, 760), ImGuiCond_FirstUseEver);
+    const float u = UiScale();
+    const float w = 380.0f * u;
+    // After a DPI change, snap the popup to the newly scaled size once
+    // (FirstUseEver would leave it at the old-scale dimensions forever). Clamp
+    // the height so a high scale in a small window can't push it off-screen.
+    const float maxH = ImGui::GetMainViewport()->WorkSize.y - (btnY - ImGui::GetMainViewport()->WorkPos.y) - 12 * u;
+    ImGui::SetNextWindowSize(ImVec2(w, std::min(760 * u, maxH)),
+                             g_controlsRescale ? ImGuiCond_Always : ImGuiCond_FirstUseEver);
+    g_controlsRescale = false;
     // Appear just under the Controls button (right-aligned to it) each time it opens.
-    ImGui::SetNextWindowPos(ImVec2(btnX + 60.0f - w, btnY), ImGuiCond_Appearing);
+    ImGui::SetNextWindowPos(ImVec2(btnX + 60.0f * u - w, btnY), ImGuiCond_Appearing);
     if (!ImGui::Begin("Controls", &g_showControls)) { ImGui::End(); return; }
     UiTipsEnabled() = g_set.showTooltips;
 
@@ -107,7 +166,7 @@ static void DrawControlsWindow(float btnX, float btnY) {
         char preview[128] = "—";
         for (auto& o : outs) if (o.index == cur)
             snprintf(preview, sizeof(preview), "%d: %dx%d %s", o.index, o.rect.right - o.rect.left, o.rect.bottom - o.rect.top, o.hdr ? "HDR" : "SDR");
-        ImGui::SetNextItemWidth(220);
+        ImGui::SetNextItemWidth(220 * u);
         if (ImGui::BeginCombo("Monitor", preview)) {
             for (auto& o : outs) {
                 char b[128]; snprintf(b, sizeof(b), "%d: %dx%d %s", o.index, o.rect.right - o.rect.left, o.rect.bottom - o.rect.top, o.hdr ? "HDR" : "SDR");
@@ -144,7 +203,7 @@ static void DrawControlsWindow(float btnX, float btnY) {
                 else { POINT pt; GetCursorPos(&pt); HWND w = WindowFromPoint(pt); if (w) g_pickedWindow = GetAncestor(w, GA_ROOT); g_pickArmUntil = 0; }
             }
         } else if (g_set.regionMode == 2) {
-            ImGui::SetNextItemWidth(220);
+            ImGui::SetNextItemWidth(220 * u);
             ImGui::InputInt4("L,T,W,H", g_set.dragRect);
             UiTip("The captured rectangle in desktop coordinates: left, top, width, height.");
         }
@@ -156,7 +215,7 @@ static void DrawControlsWindow(float btnX, float btnY) {
         char qfmt[48];
         if (g_set.perPixelQuality()) snprintf(qfmt, sizeof(qfmt), "per pixel");
         else snprintf(qfmt, sizeof(qfmt), "1/%.2f resolution", g_set.qualityDownsample);
-        ImGui::SetNextItemWidth(160);
+        ImGui::SetNextItemWidth(160 * u);
         if (ImGui::SliderFloat("Quality", &g_set.qualityDownsample, 1.0f, 8.0f, qfmt, ImGuiSliderFlags_Logarithmic))
             g_set.qualityDownsample = std::clamp(g_set.qualityDownsample, 1.0f, 8.0f);
         UiReset(g_set.qualityDownsample, UiDefaults().qualityDownsample);
@@ -177,12 +236,12 @@ static void DrawControlsWindow(float btnX, float btnY) {
         }
         const char* ss[] = { "Off", "2x", "4x" };
         int ssi = g_set.renderSupersample <= 1 ? 0 : (g_set.renderSupersample >= 4 ? 2 : 1);
-        ImGui::SetNextItemWidth(160);
+        ImGui::SetNextItemWidth(160 * u);
         if (ImGui::Combo("Anti-alias (supersample)", &ssi, ss, 3)) g_set.renderSupersample = ssi == 0 ? 1 : (ssi == 1 ? 2 : 4);
         UiReset(g_set.renderSupersample, UiDefaults().renderSupersample);
         UiTip("Render the scope graphics at 2x/4x resolution and downscale - smoother "
               "traces and graticule lines for a bit more GPU work.");
-        ImGui::SetNextItemWidth(160);
+        ImGui::SetNextItemWidth(160 * u);
         ImGui::SliderFloat("Source blur", &g_set.sourceBlur, 0.0f, 8.0f, "%.1f px");
         UiReset(g_set.sourceBlur, UiDefaults().sourceBlur);
         UiTip("Gaussian-blur the capture before it reaches the scopes, so dither and "
@@ -197,7 +256,7 @@ static void DrawControlsWindow(float btnX, float btnY) {
         }
         ImGui::Checkbox("Show FPS", &g_set.showFps);
         UiReset(g_set.showFps, UiDefaults().showFps);
-        ImGui::SetNextItemWidth(160);
+        ImGui::SetNextItemWidth(160 * u);
         ImGui::SliderInt("FPS limit (0=vsync)", &g_set.fpsLimit, 0, 240);
         UiReset(g_set.fpsLimit, UiDefaults().fpsLimit);
         UiTip("Cap how often the scopes update, to spend less GPU. 0 = sync to the "
@@ -212,7 +271,7 @@ static void DrawControlsWindow(float btnX, float btnY) {
         UiTip("Mark where the pixel under your mouse lands on each scope: a white "
               "circle for luminance and R/G/B circles for the channels. Works while "
               "hovering anywhere on the captured screen area.");
-        ImGui::SameLine(); ImGui::SetNextItemWidth(70);
+        ImGui::SameLine(); ImGui::SetNextItemWidth(70 * u);
         ImGui::SliderFloat("Size", &g_set.hoverCircleRadius, 3.0f, 24.0f, "%.0f");
         UiReset(g_set.hoverCircleRadius, UiDefaults().hoverCircleRadius);
         ImGui::Checkbox("Hover/peak readout (top)", &g_set.showHoverReadout);
@@ -249,7 +308,7 @@ static void DrawControlsWindow(float btnX, float btnY) {
         ImGui::PushID(1000 + i);
         char hdr[64]; snprintf(hdr, sizeof(hdr), "Panel %d - %s", i + 1, ScopeTypeName(g_set.panelScope[i]));
         if (ImGui::CollapsingHeader(hdr, ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::SetNextItemWidth(180);
+            ImGui::SetNextItemWidth(180 * u);
             ScopeCombo("Scope", g_set.panelScope[i]);
             if (g_panels[i].Scope()) g_panels[i].Scope()->DrawControls(g_set);
         }
@@ -298,7 +357,8 @@ static void Sdr8(float scrgb, float sdrNorm, char* out, size_t n) {
 // per-channel PEAKS of the region (four independent maxima — the brightest
 // pixel in luminance is not necessarily the brightest in any one channel).
 static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float sdrNits,
-                             const float peakLRGB[4], bool peaksValid, ImVec2 a0, ImVec2 a1) {
+                             const float peakLRGB[4], bool peaksValid, ImVec2 a0, ImVec2 a1,
+                             float avoidLeftX, float avoidRightX) {
     if (!s.showHoverReadout) return;
     const bool peaks = !probe.probeValid;
     if (peaks && !peaksValid) return;
@@ -347,21 +407,28 @@ static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float s
     ImDrawList* dl = ImGui::GetWindowDrawList();
     float cx = (a0.x + a1.x) * 0.5f;
     const float lineH = ImGui::GetTextLineHeight();
-    const float y = a0.y + 11;  // moved 5px down so it clears the 10k line
+    const float su = UiScale();
+    const float bw = std::max(total, line2[0] ? ImGui::CalcTextSize(line2).x : 0.0f);
+    float y = a0.y + 11 * su;  // moved 5px down so it clears the 10k line
+    // If the readout would run under the top-right button strip or (multi-panel
+    // layouts) panel 1's top-left scope combo, drop it a row instead of colliding.
+    if ((avoidLeftX  > 0.0f && cx + bw * 0.5f + 8 * su > avoidLeftX) ||
+        (avoidRightX > 0.0f && cx - bw * 0.5f - 8 * su < avoidRightX))
+        y += ImGui::GetFrameHeight() + 6 * su;
     float w2 = line2[0] ? ImGui::CalcTextSize(line2).x : 0.0f;
 
     // Optional translucent black plate behind the readout for legibility.
     if (s.readoutBg) {
-        float bw = std::max(total, w2);
-        float bh = lineH + (line2[0] ? lineH + 2 : 0);
-        ImVec2 p0(cx - bw * 0.5f - 6, y - 3), p1(cx + bw * 0.5f + 6, y + bh + 3);
-        dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 140), 4.0f);
+        float bh = lineH + (line2[0] ? lineH + 2 * su : 0);
+        ImVec2 p0(cx - bw * 0.5f - 6 * su, y - 3 * su);
+        ImVec2 p1(cx + bw * 0.5f + 6 * su, y + bh + 3 * su);
+        dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 140), 4.0f * su);
     }
 
     float x = cx - total * 0.5f;
     for (int i = 0; i < nseg; ++i) { dl->AddText(ImVec2(x, y), segs[i].col, segs[i].txt); x += widths[i]; }
     if (line2[0])
-        dl->AddText(ImVec2(cx - w2 * 0.5f, y + lineH + 2), IM_COL32(180, 200, 235, 230), line2);
+        dl->AddText(ImVec2(cx - w2 * 0.5f, y + lineH + 2 * su), IM_COL32(180, 200, 235, 230), line2);
 }
 
 // Layout rects within the given content area.
@@ -392,7 +459,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
     wc.hIconSm = wc.hIcon;
     RegisterClassExW(&wc);
 
-    int wx = CW_USEDEFAULT, wy = CW_USEDEFAULT, ww = 1440, wh = 900;
+    const float sysScale = (float)GetDpiForSystem() / 96.0f;
+    int wx = CW_USEDEFAULT, wy = CW_USEDEFAULT;
+    int ww = (int)(1440 * sysScale), wh = (int)(900 * sysScale);
     if (g_set.wndR > g_set.wndL && g_set.wndB > g_set.wndT) {
         wx = g_set.wndL; wy = g_set.wndT; ww = g_set.wndR - g_set.wndL; wh = g_set.wndB - g_set.wndT;
     }
@@ -406,14 +475,16 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
     IMGUI_CHECKVERSION(); ImGui::CreateContext();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     ImGui::GetIO().IniFilename = nullptr;
-    // Tooltips only appear once the mouse has been parked on a control for a
-    // moment, so they never flash by during ordinary use.
-    ImGui::GetStyle().HoverFlagsForTooltipMouse =
-        ImGuiHoveredFlags_Stationary | ImGuiHoveredFlags_DelayNormal;
-    ImGui::GetStyle().HoverDelayNormal = 0.55f;
-    ImGui::GetStyle().HoverStationaryDelay = 0.25f;
-    ImGui::StyleColorsDark();
     ImGui_ImplWin32_Init(hwnd); ImGui_ImplDX11_Init(g_d3d.Device(), g_d3d.Context());
+
+    // UI scale follows the window's monitor DPI (WM_DPICHANGED tracks moves);
+    // HDRSCOPES_UISCALE=1.5 overrides it for testing.
+    float uiScale = (float)GetDpiForWindow(hwnd) / 96.0f;
+    if (const char* e = getenv("HDRSCOPES_UISCALE")) {
+        float v = (float)atof(e);
+        if (v >= 0.5f && v <= 4.0f) { g_uiScaleOverride = v; uiScale = v; }
+    }
+    ApplyUiScale(uiScale);
 
     g_test.Init(g_d3d.Device());
     g_blur.Init(g_d3d.Device());
@@ -438,6 +509,14 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
             TranslateMessage(&msg); DispatchMessage(&msg);
         }
         if (!running) break;
+
+        // Apply a pending DPI rescale before the resize path so a cross-monitor
+        // move rebuilds ImGui device objects once, not twice (ApplyUiScale only
+        // invalidates; the resize block or NewFrame recreates).
+        if (g_pendingUiScale > 0.0f) {
+            if (fabsf(g_pendingUiScale - UiScale()) > 0.01f) ApplyUiScale(g_pendingUiScale);
+            g_pendingUiScale = -1.0f;
+        }
 
         if (g_resize) {
             g_d3d.Resize(g_resizeW, g_resizeH);
@@ -533,8 +612,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         ImVec2 area0 = ImGui::GetWindowPos();
         ImVec2 area1 = ImVec2(area0.x + ImGui::GetWindowSize().x, area0.y + ImGui::GetWindowSize().y);
         int count = (int)g_set.layout;
-        // Reserve a 5px strip at the very top so the "10k" nit label isn't clipped.
-        ImVec2 scopeArea0 = ImVec2(area0.x, area0.y + 5.0f);
+        const float u = UiScale();
+        // Reserve a small strip at the very top so the "10k" nit label isn't clipped.
+        ImVec2 scopeArea0 = ImVec2(area0.x, area0.y + 5.0f * u);
         ImVec2 r0[4], r1[4]; LayoutRects(scopeArea0, area1, count, r0, r1);
         for (int i = 0; i < count; ++i)
             g_panels[i].Draw(i, r0[i], r1[i], input, g_set, g_sdrWhiteNits, probe, uiB);
@@ -544,10 +624,18 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         for (int i = 0; i < count; ++i)
             dl->AddRect(r0[i], r1[i], IM_COL32(60, 60, 60, 255));
 
+        // Top-right strip geometry (the readout needs it to dodge the buttons).
+        const float comboW = 150.0f * u;
+        float stripY = area0.y + 11 * u;                                       // 5px down to clear the 10k line
+        float stripX = area1.x - 240 * u - (count == 1 ? comboW + 8 * u : 0);  // 80px right, snug in the corner
+
         // Hover readout, centered over the left half (so it clears the divider/buttons
         // in 2/4-up layouts and stays over the left scope).
         ImVec2 readoutR1 = (count == 1) ? area1 : ImVec2(area0.x + (area1.x - area0.x) * 0.5f, area1.y);
-        DrawHoverReadout(probe, g_set, g_sdrWhiteNits, peakLRGB, peaksValid, area0, readoutR1);
+        // In multi-panel layouts panel 1 has a scope combo at its top-left.
+        const float avoidRightX = (count > 1) ? area0.x + (8 + 140) * u : -1.0f;
+        DrawHoverReadout(probe, g_set, g_sdrWhiteNits, peakLRGB, peaksValid, area0, readoutR1,
+                         stripX, avoidRightX);
 
         // Opaque widget backgrounds for the floating top strips (so they read
         // clearly over the scope graphs instead of being semi-transparent).
@@ -561,9 +649,6 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         };
 
         // Top-right strip: (single layout) [scope combo] [Zoom] [1][2][4][Controls].
-        const float comboW = 150.0f;
-        float stripY = area0.y + 11;                                   // 5px down to clear the 10k line
-        float stripX = area1.x - 240 - (count == 1 ? comboW + 8 : 0);  // 80px right, snug in the corner
         ImGui::SetCursorScreenPos(ImVec2(stripX, stripY));
         pushOpaqueWidgets();
         if (count == 1) {
@@ -584,8 +669,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         if (count > 1) {
             pushOpaqueWidgets();
             for (int i = 0; i < count; ++i) {
-                ImGui::SetCursorScreenPos(ImVec2(r0[i].x + 8, r0[i].y + 6));
-                ImGui::PushID(2000 + i); ImGui::SetNextItemWidth(140);
+                ImGui::SetCursorScreenPos(ImVec2(r0[i].x + 8 * u, r0[i].y + 6 * u));
+                ImGui::PushID(2000 + i); ImGui::SetNextItemWidth(140 * u);
                 ScopeCombo("##sc", g_set.panelScope[i]);
                 ImGui::PopID();
             }
@@ -597,7 +682,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
             char fps[32]; snprintf(fps, sizeof(fps), "%.0f FPS", ImGui::GetIO().Framerate);
             float fsz = ImGui::GetFontSize() * 0.85f;            // slightly smaller font
             float w = ImGui::CalcTextSize(fps).x * 0.85f;
-            dl->AddText(ImGui::GetFont(), fsz, ImVec2(area1.x - w - 16, area1.y - 24),  // 6px left, 2px up
+            dl->AddText(ImGui::GetFont(), fsz, ImVec2(area1.x - w - 16 * u, area1.y - 24 * u),  // 6px left, 2px up
                         IM_COL32(200, 200, 200, 220), fps);
         }
 
@@ -605,7 +690,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         ImGui::PopStyleVar();
 
         // Controls popup appears just under the Controls button.
-        DrawControlsWindow(ctrlBtnX, area0.y + 34);
+        DrawControlsWindow(ctrlBtnX, area0.y + 34 * u);
 
         ImGui::Render();
         ID3D11RenderTargetView* rtv = g_d3d.BackBufferRTV();

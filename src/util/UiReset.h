@@ -10,6 +10,10 @@
 
 inline const Settings& UiDefaults() { static const Settings d; return d; }
 
+// Current UI scale (window DPI / 96). Fixed pixel sizes in UI code multiply by
+// this; fonts and style paddings are rebuilt in main.cpp's ApplyUiScale.
+inline float& UiScale() { static float s = 1.0f; return s; }
+
 inline bool UiResetClicked() {
     return ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right);
 }
