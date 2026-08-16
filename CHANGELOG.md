@@ -6,6 +6,11 @@ so every release ships with a readable summary.
 
 ## v1.0.3 — 2026-08-16
 
+- 4-scope layout: when one column holds only the square scopes (vectorscope,
+  CIE) and the other only the stretchy ones (waveform, histogram), the
+  vertical split now shifts automatically so the square column is exactly as
+  wide as its graphs can use — the waveform/histogram column gets all the
+  reclaimed width instead of leaving dead space beside the square scopes.
 - Fixed: in the 2- and 4-scope layouts, the scope-type dropdowns no longer
   overlap the waveform's nit labels — they now start right of the label column.
 - Scope-type dropdowns size themselves to the selected scope's name, so a

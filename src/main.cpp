@@ -456,8 +456,22 @@ static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float s
         dl->AddText(ImVec2(cx - w2 * 0.5f, y + lineH + 2 * su), IM_COL32(180, 200, 235, 230), line2);
 }
 
-// Layout rects within the given content area.
-static void LayoutRects(ImVec2 p0, ImVec2 p1, int count, ImVec2 out0[4], ImVec2 out1[4]) {
+// Quad-cell width that panel i's fixed-aspect scope (vectorscope/CIE) can
+// actually use at the given cell height — its graph plus label margins. 0 for
+// stretchy scopes that take whatever width they get (and before the panel's
+// scope exists, which keeps the split centered for that first frame).
+static float IdealCellW(int i, float cellH, const Settings& s) {
+    IScope* sc = g_panels[i].Scope();
+    float aspect = sc ? sc->AspectRatio() : 0.0f;
+    if (aspect <= 0.0f) return 0.0f;
+    Margins m = sc->GetMargins(s);
+    const float u = UiScale();
+    return (cellH - (m.t + m.b) * u) * aspect + (m.l + m.r) * u;
+}
+
+// Layout rects within the given content area. splitX: absolute x of the quad
+// layout's vertical split (<0 = centered).
+static void LayoutRects(ImVec2 p0, ImVec2 p1, int count, float splitX, ImVec2 out0[4], ImVec2 out1[4]) {
     float w = p1.x - p0.x, h = p1.y - p0.y;
     const float pad = 2.0f;
     if (count == 1) { out0[0] = p0; out1[0] = p1; }
@@ -465,7 +479,7 @@ static void LayoutRects(ImVec2 p0, ImVec2 p1, int count, ImVec2 out0[4], ImVec2 
         out0[0] = p0; out1[0] = ImVec2(p0.x + w * 0.5f - pad, p1.y);
         out0[1] = ImVec2(p0.x + w * 0.5f + pad, p0.y); out1[1] = p1;
     } else {
-        float mx = p0.x + w * 0.5f, my = p0.y + h * 0.5f;
+        float mx = (splitX > 0.0f) ? splitX : p0.x + w * 0.5f, my = p0.y + h * 0.5f;
         out0[0] = p0;                          out1[0] = ImVec2(mx - pad, my - pad);
         out0[1] = ImVec2(mx + pad, p0.y);      out1[1] = ImVec2(p1.x, my - pad);
         out0[2] = ImVec2(p0.x, my + pad);      out1[2] = ImVec2(mx - pad, p1.y);
@@ -653,7 +667,26 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         const float u = UiScale();
         // Reserve a small strip at the very top so the "10k" nit label isn't clipped.
         ImVec2 scopeArea0 = ImVec2(area0.x, area0.y + 5.0f * u);
-        ImVec2 r0[4], r1[4]; LayoutRects(scopeArea0, area1, count, r0, r1);
+
+        // Quad layout: when one column holds only fixed-aspect scopes
+        // (vectorscope/CIE) and the other only stretchy ones, shift the
+        // vertical split so the square column gets exactly the width its
+        // graphs can use and the stretchy column takes the reclaimed space.
+        // Never below 50% for the stretchy column (narrow windows stay 50/50).
+        float splitX = -1.0f;
+        if (count == 4) {
+            const float pad = 2.0f;  // matches LayoutRects
+            float cellH = (area1.y - scopeArea0.y) * 0.5f - pad;
+            auto colWidth = [&](int a, int b) {  // widest ideal width; 0 = has a stretchy panel
+                float wa = IdealCellW(a, cellH, g_set), wb = IdealCellW(b, cellH, g_set);
+                return (wa > 0.0f && wb > 0.0f) ? std::max(wa, wb) : 0.0f;
+            };
+            float li = colWidth(0, 2), ri = colWidth(1, 3);
+            float cx = (scopeArea0.x + area1.x) * 0.5f;
+            if (ri > 0.0f && li <= 0.0f)      splitX = std::max(cx, area1.x - pad - ri);
+            else if (li > 0.0f && ri <= 0.0f) splitX = std::min(cx, scopeArea0.x + pad + li);
+        }
+        ImVec2 r0[4], r1[4]; LayoutRects(scopeArea0, area1, count, splitX, r0, r1);
         for (int i = 0; i < count; ++i)
             g_panels[i].Draw(i, r0[i], r1[i], input, g_set, g_sdrWhiteNits, probe, uiB);
 
@@ -674,12 +707,16 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         float stripY = area0.y + 11 * u;                                       // 5px down to clear the 10k line
         float stripX = area1.x - 240 * u - (count == 1 ? comboW + 8 * u : 0);  // 80px right, snug in the corner
 
-        // Hover readout, centered over the left half (so it clears the divider/buttons
-        // in 2/4-up layouts and stays over the left scope).
-        ImVec2 readoutR1 = (count == 1) ? area1 : ImVec2(area0.x + (area1.x - area0.x) * 0.5f, area1.y);
-        // In multi-panel layouts panel 1 has a scope combo at its top-left.
-        const float avoidRightX = (count > 1) ? area0.x + panelComboX(0) + comboW + 8 * u : -1.0f;
-        DrawHoverReadout(probe, g_set, g_sdrWhiteNits, peakLRGB, peaksValid, area0, readoutR1,
+        // Hover readout: centered over the wider top panel (with an off-center
+        // quad split that's the stretchy scope, which has room to spare), so it
+        // clears the divider and the fixed-aspect graphs.
+        int rp = (count > 1 && r1[1].x - r0[1].x > r1[0].x - r0[0].x + 1.0f) ? 1 : 0;
+        ImVec2 readout0 = (count == 1) ? area0 : ImVec2(r0[rp].x, area0.y);
+        ImVec2 readout1 = (count == 1) ? area1 : ImVec2(r1[rp].x, area1.y);
+        // That panel's scope combo sits at its top-left; dodge it (and the strip).
+        const float avoidRightX = (count > 1)
+            ? r0[rp].x + panelComboX(rp) + ScopeComboWidth(g_set.panelScope[rp]) + 8 * u : -1.0f;
+        DrawHoverReadout(probe, g_set, g_sdrWhiteNits, peakLRGB, peaksValid, readout0, readout1,
                          stripX, avoidRightX);
 
         // Opaque widget backgrounds for the floating top strips (so they read
