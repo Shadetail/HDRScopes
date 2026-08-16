@@ -21,8 +21,7 @@ can put it on a scope — live, at ~110 FPS for a 4K capture.
   <img src="docs/img/hero.png" alt="HDRScopes waveform of a live 4K HDR feed">
   <br>
   <sub><i>Colorized RGB waveform of a live 4K HDR feed on the 0–10,000-nit log
-  axis. Orange: a draggable 2,000-nit reference line. Circles: the hover probe
-  marking the pixel under the cursor.</i></sub>
+  axis. Circles: the hover probe marking the pixel under the cursor.</i></sub>
 </p>
 
 ## Scopes
