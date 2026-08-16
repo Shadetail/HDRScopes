@@ -50,7 +50,10 @@ cursor.
 
 Grab the latest zip from **[Releases](https://github.com/Shadetail/HDRScopes/releases/latest)**,
 unzip anywhere, run `HDRScopes.exe`. No installer, no dependencies, no
-telemetry. Settings persist to `%LOCALAPPDATA%\HDRScopes\settings.ini`.
+telemetry. Fully portable: settings persist to a plain-text `settings.ini`
+next to the exe, so deleting the folder removes every trace, and separate
+copies of the app can keep separate setups. (If the folder isn't writable —
+e.g. Program Files — settings fall back to `%LOCALAPPDATA%\HDRScopes`.)
 
 **Requirements:** Windows 10 (1809+) or Windows 11 · any DX11-capable GPU ·
 HDR or SDR output. SDR signals (an SDR desktop, or SDR content on an HDR

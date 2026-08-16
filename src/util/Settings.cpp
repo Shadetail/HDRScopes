@@ -5,7 +5,22 @@
 #include <sstream>
 #pragma comment(lib, "shell32.lib")
 
-std::wstring Settings::FilePath() {
+// Local-first storage: settings.ini lives next to the exe, so an unzipped
+// copy is fully portable (and each copy can keep its own setup). When the
+// exe's folder isn't writable (e.g. Program Files), %LOCALAPPDATA%\HDRScopes
+// is the fallback; pre-1.0.1 files there still load and migrate on first save.
+namespace {
+std::wstring ExeDirIni() {
+    wchar_t exe[MAX_PATH];
+    if (!GetModuleFileNameW(nullptr, exe, MAX_PATH)) return L"";
+    std::wstring p(exe);
+    size_t slash = p.find_last_of(L"\\/");
+    if (slash == std::wstring::npos) return L"";
+    p.resize(slash + 1);
+    return p + L"settings.ini";
+}
+
+std::wstring AppDataIni() {
     PWSTR path = nullptr;
     std::wstring dir = L".";
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &path))) {
@@ -15,6 +30,7 @@ std::wstring Settings::FilePath() {
     dir += L"\\HDRScopes";
     CreateDirectoryW(dir.c_str(), nullptr);
     return dir + L"\\settings.ini";
+}
 }
 
 // ---- tiny key=value writer/reader -------------------------------------------
@@ -35,7 +51,10 @@ struct KV {
 }
 
 void Settings::Save() const {
-    std::ofstream o(FilePath());
+    std::ofstream o;
+    const std::wstring local = ExeDirIni();
+    if (!local.empty()) o.open(local);
+    if (!o) o.open(AppDataIni());
     if (!o) return;
     W(o, "showFps", showFps);
     W(o, "fpsLimit", fpsLimit);
@@ -114,7 +133,10 @@ void Settings::Save() const {
 }
 
 void Settings::Load() {
-    std::ifstream in(FilePath());
+    std::ifstream in;
+    const std::wstring local = ExeDirIni();
+    if (!local.empty()) in.open(local);
+    if (!in) in.open(AppDataIni());
     if (!in) return;
     KV kv;
     std::string line;

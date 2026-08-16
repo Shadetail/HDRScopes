@@ -16,8 +16,10 @@ texture) → `IScope::Render` (render-side resolve into an offscreen RT) →
 `ScopePanel` (HDR-preserving image draw + `DrawOverlay` graticule/labels/
 probe). `ScopeFactory` + `ScopePanel` host the 1/2/4-up layout.
 
-- `util/Settings` persists everything to `%LOCALAPPDATA%\HDRScopes\settings.ini`
-  (plus window placement).
+- `util/Settings` persists everything (plus window placement) to a
+  `settings.ini` next to the exe — local-first/portable — falling back to
+  `%LOCALAPPDATA%\HDRScopes` when the exe's folder isn't writable; a pre-1.0.1
+  file there still loads and migrates on first save.
 - `util/SdrWhite` queries the Windows SDR-white level.
 - `util/PQ.h` mirrors the HLSL PQ math on the CPU for the overlays.
 - The ImGui UI is drawn at the Windows SDR-white brightness on HDR outputs

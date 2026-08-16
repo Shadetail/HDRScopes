@@ -1,5 +1,6 @@
-// All persistent application state. Saved to %LOCALAPPDATA%\HDRScopes\settings.ini
-// (plus the Win32 window placement) and restored on launch.
+// All persistent application state (including the Win32 window placement).
+// Saved to settings.ini next to the exe (portable, local-first); falls back to
+// %LOCALAPPDATA%\HDRScopes when the exe's folder isn't writable.
 #pragma once
 
 #include "util/Common.h"
@@ -109,7 +110,6 @@ struct Settings {
     int  wndShow = 0; // SW_* (0 = use default)
 
     // ---- IO ----
-    static std::wstring FilePath();
     void Load();
     void Save() const;
 };
