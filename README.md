@@ -61,6 +61,11 @@ next to the exe, so deleting the folder removes every trace, and separate
 copies of the app can keep separate setups. (If the folder isn't writable —
 e.g. Program Files — settings fall back to `%LOCALAPPDATA%\HDRScopes`.)
 
+On startup the app asks github.com whether a newer release exists and shows a
+small notice if so — nothing is sent beyond the request itself, nothing is
+installed automatically, and the check can be turned off under Controls >
+Preferences.
+
 **Requirements:** Windows 10 (1809+) or Windows 11 · any DX11-capable GPU ·
 HDR or SDR output. SDR signals (an SDR desktop, or SDR content on an HDR
 desktop — same thing to the capture) are read the HDR-compatible way, as the

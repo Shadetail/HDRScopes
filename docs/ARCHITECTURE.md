@@ -21,6 +21,9 @@ probe). `ScopeFactory` + `ScopePanel` host the 1/2/4-up layout.
   `%LOCALAPPDATA%\HDRScopes` when the exe's folder isn't writable; a pre-1.0.1
   file there still loads and migrates on first save.
 - `util/SdrWhite` queries the Windows SDR-white level.
+- `util/UpdateCheck` is the startup update check: a background WinHTTP GET of
+  `github.com/<repo>/releases/latest` with redirects disabled — the newest
+  tag comes back in the 302 Location header, so no JSON or API quota.
 - `util/PQ.h` mirrors the HLSL PQ math on the CPU for the overlays.
 - The ImGui UI is drawn at the Windows SDR-white brightness on HDR outputs
   while the scope graphs keep their true HDR nit values.

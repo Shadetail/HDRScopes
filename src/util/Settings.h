@@ -26,6 +26,8 @@ struct Settings {
                                         // is outside the window (1 = never fade)
     bool   debugShowTestPattern = false; // expose the synthetic test source (debug)
     bool   useTestPattern = false;    // currently using the test source
+    bool   checkForUpdates = true;    // startup check for a newer GitHub release
+    std::string skipUpdateVersion;    // release tag the user chose not to be nagged about
 
     // ---- Capture / region ----
     int    outputIndex = -1;          // -1 = auto (first HDR)

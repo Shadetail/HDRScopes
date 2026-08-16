@@ -9,6 +9,7 @@
 #include "util/SdrWhite.h"
 #include "util/Format.h"
 #include "util/UiReset.h"
+#include "util/UpdateCheck.h"
 #include "app/D3DContext.h"
 #include "capture/CaptureSource.h"
 #include "capture/Region.h"
@@ -27,6 +28,7 @@
 
 #include <d3d11.h>
 #include <dwmapi.h>
+#include <shellapi.h>
 #include <timeapi.h>
 #include <algorithm>
 
@@ -165,7 +167,6 @@ static void DrawControlsWindow(float btnX, float btnY) {
     // Appear just under the Controls button (right-aligned to it) each time it opens.
     ImGui::SetNextWindowPos(ImVec2(btnX + 60.0f * u - w, btnY), ImGuiCond_Appearing);
     if (!ImGui::Begin("Controls", &g_showControls)) { ImGui::End(); return; }
-    UiTipsEnabled() = g_set.showTooltips;
 
     // Warm amber for the category headers/expanders — distinct from the blue
     // input widgets so section titles read clearly instead of blending in.
@@ -332,6 +333,17 @@ static void DrawControlsWindow(float btnX, float btnY) {
         ImGui::Checkbox("Show tooltips", &g_set.showTooltips);
         UiReset(g_set.showTooltips, UiDefaults().showTooltips);
 
+        // Turning the check on mid-session runs it right away (it normally
+        // fires once at startup; StartAsync ignores repeat calls).
+        bool updateSettingChanged =
+            ImGui::Checkbox("Check for updates at startup", &g_set.checkForUpdates);
+        updateSettingChanged |= UiReset(g_set.checkForUpdates, UiDefaults().checkForUpdates);
+        if (updateSettingChanged && g_set.checkForUpdates)
+            updatecheck::StartAsync();
+        UiTip("Once per launch, ask github.com for the newest HDRScopes release "
+              "and show a notice if it's newer than this build. Only the version "
+              "number is fetched; nothing is installed automatically.");
+
         float fadePct = g_set.controlsFadeOpacity * 100.0f;
         ImGui::SetNextItemWidth(160 * u);
         if (ImGui::SliderFloat("Idle controls opacity", &fadePct, 0.0f, 100.0f, "%.0f%%",
@@ -351,6 +363,7 @@ static void DrawControlsWindow(float btnX, float btnY) {
             def.wndL = g_set.wndL; def.wndT = g_set.wndT; def.wndR = g_set.wndR; def.wndB = g_set.wndB;
             def.wndShow = g_set.wndShow; def.outputIndex = g_set.outputIndex;
             g_set = def;
+            if (g_set.checkForUpdates) updatecheck::StartAsync();
         }
         ImGui::PushTextWrapPos(0.0f);
         ImGui::TextDisabled("Tip: right-click any individual setting to reset just that one to its default.");
@@ -366,6 +379,39 @@ static void DrawControlsWindow(float btnX, float btnY) {
     }
 
     ImGui::PopStyleColor(3);
+    ImGui::End();
+}
+
+// ---- update notice -----------------------------------------------------------
+// Shown once per session when the startup check found a newer GitHub release
+// (unless the user chose to skip that version).
+static void DrawUpdateNotice() {
+    static bool dismissed = false;
+    std::string tag, url;
+    if (dismissed || !updatecheck::NewerAvailable(&tag, &url)) return;
+    if (tag == g_set.skipUpdateVersion) return;
+    const float u = UiScale();
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + 48 * u),
+                            ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
+    if (ImGui::Begin("Update available", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("HDRScopes %s is available (this is v%s).", tag.c_str(), HDRSCOPES_VERSION);
+        if (ImGui::Button("View release")) {
+            // >32 = success; keep the notice up if the browser didn't launch.
+            if ((INT_PTR)ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr,
+                                       SW_SHOWNORMAL) > 32)
+                dismissed = true;
+        }
+        UiTip("Open the release page in your browser to see what's new and "
+              "download the update.");
+        ImGui::SameLine();
+        if (ImGui::Button("Skip this version")) { g_set.skipUpdateVersion = tag; dismissed = true; }
+        UiTip("Don't notify about this version again. The next release after "
+              "it will show a notice as usual.");
+        ImGui::SameLine();
+        if (ImGui::Button("Later")) dismissed = true;
+        UiTip("Hide the notice for this session; it returns on the next launch.");
+    }
     ImGui::End();
 }
 
@@ -491,6 +537,7 @@ static void LayoutRects(ImVec2 p0, ImVec2 p1, int count, float splitX, ImVec2 ou
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     g_set.Load();
+    if (g_set.checkForUpdates) updatecheck::StartAsync();
 
     WNDCLASSEXW wc = { sizeof(wc) };
     wc.style = CS_HREDRAW | CS_VREDRAW; wc.lpfnWndProc = WndProc; wc.hInstance = hInst;
@@ -659,6 +706,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
 
         // ---- ImGui frame ----
         ImGui_ImplDX11_NewFrame(); ImGui_ImplWin32_NewFrame(); ImGui::NewFrame();
+        UiTipsEnabled() = g_set.showTooltips;
 
         ImGuiViewport* vp = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(vp->WorkPos); ImGui::SetNextWindowSize(vp->WorkSize);
@@ -787,6 +835,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
 
         // Controls popup appears just under the Controls button.
         DrawControlsWindow(ctrlBtnX, area0.y + 34 * u);
+        DrawUpdateNotice();
 
         ImGui::Render();
         ID3D11RenderTargetView* rtv = g_d3d.BackBufferRTV();

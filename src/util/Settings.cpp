@@ -39,6 +39,7 @@ void W(std::ostream& o, const char* k, bool v)   { o << k << "=" << (v ? 1 : 0) 
 void W(std::ostream& o, const char* k, int v)    { o << k << "=" << v << "\n"; }
 void W(std::ostream& o, const char* k, float v)  { o << k << "=" << v << "\n"; }
 void W(std::ostream& o, const char* k, double v) { o << k << "=" << v << "\n"; }
+void W(std::ostream& o, const char* k, const std::string& v) { o << k << "=" << v << "\n"; }
 
 struct KV {
     std::map<std::string, std::string> m;
@@ -46,6 +47,7 @@ struct KV {
     int  geti(const char* k, int d) const { auto i = m.find(k); return i == m.end() ? d : atoi(i->second.c_str()); }
     float getf(const char* k, float d) const { auto i = m.find(k); return i == m.end() ? d : (float)atof(i->second.c_str()); }
     double getd(const char* k, double d) const { auto i = m.find(k); return i == m.end() ? d : atof(i->second.c_str()); }
+    std::string gets(const char* k, const std::string& d) const { auto i = m.find(k); return i == m.end() ? d : i->second; }
     bool has(const char* k) const { return m.find(k) != m.end(); }
 };
 }
@@ -63,6 +65,8 @@ void Settings::Save() const {
     W(o, "controlsFadeOpacity", controlsFadeOpacity);
     W(o, "debugShowTestPattern", debugShowTestPattern);
     W(o, "useTestPattern", useTestPattern);
+    W(o, "checkForUpdates", checkForUpdates);
+    W(o, "skipUpdateVersion", skipUpdateVersion);
     W(o, "outputIndex", outputIndex);
     W(o, "regionMode", regionMode);
     for (int i = 0; i < 4; ++i) { char k[32]; snprintf(k, 32, "dragRect%d", i); W(o, k, dragRect[i]); }
@@ -157,6 +161,8 @@ void Settings::Load() {
     if (fade >= 0.0f && fade <= 1.0f) controlsFadeOpacity = fade;
     debugShowTestPattern = kv.getb("debugShowTestPattern", debugShowTestPattern);
     useTestPattern = kv.getb("useTestPattern", useTestPattern);
+    checkForUpdates = kv.getb("checkForUpdates", checkForUpdates);
+    skipUpdateVersion = kv.gets("skipUpdateVersion", skipUpdateVersion);
     outputIndex = kv.geti("outputIndex", outputIndex);
     regionMode = kv.geti("regionMode", regionMode);
     for (int i = 0; i < 4; ++i) { char k[32]; snprintf(k, 32, "dragRect%d", i); dragRect[i] = kv.geti(k, dragRect[i]); }

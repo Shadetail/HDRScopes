@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(HDRScopes VERSION 1.0.4 LANGUAGES CXX)
+project(HDRScopes VERSION 1.0.5 LANGUAGES CXX)
 if(MSVC)
     enable_language(RC)
 endif()
@@ -31,6 +31,7 @@ add_executable(HDRScopes WIN32
     src/util/ShaderCompiler.cpp
     src/util/Settings.cpp
     src/util/SdrWhite.cpp
+    src/util/UpdateCheck.cpp
     src/capture/CaptureSource.cpp
     src/capture/RegionPicker.cpp
     src/capture/PixelProbe.cpp
@@ -49,7 +50,7 @@ add_executable(HDRScopes WIN32
 target_include_directories(HDRScopes PRIVATE src resources)
 target_link_libraries(HDRScopes PRIVATE
     imgui
-    d3d11 dxgi d3dcompiler dxguid dwmapi msimg32 winmm
+    d3d11 dxgi d3dcompiler dxguid dwmapi msimg32 winmm winhttp shell32
 )
 target_compile_definitions(HDRScopes PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 

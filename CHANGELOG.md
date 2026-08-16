@@ -4,6 +4,15 @@ User-facing changes per release. When a `vX.Y.Z` tag is pushed, the release
 workflow copies the matching `## vX.Y.Z` section into the GitHub Release body,
 so every release ships with a readable summary.
 
+## v1.0.5 — 2026-08-16
+
+- Update check: on startup the app now asks github.com whether a newer
+  release exists and, if so, shows a small notice with View release / Skip
+  this version / Later. Only the latest version number is fetched — nothing
+  is sent beyond the request itself and nothing installs automatically. Can
+  be turned off under Controls > Preferences > "Check for updates at
+  startup".
+
 ## v1.0.4 — 2026-08-16
 
 - The title bar is now always dark to match the app's dark theme. Previously
