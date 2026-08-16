@@ -26,8 +26,6 @@ can put it on a scope — live, at ~110 FPS for a 4K capture.
 
 ## Scopes
 
-<img align="right" width="300" src="docs/img/vectorscope.png" alt="Vectorscope, BT.2020 sweep">
-
 - **Waveform** — per-column PQ-nit histogram over a fixed 0–10,000 nit log
   axis. Luminance or RGB mode, optional colorize, extents display (colored
   points or a supersampled 1-px envelope line), draggable custom reference
@@ -37,7 +35,7 @@ can put it on a scope — live, at ~110 FPS for a 4K capture.
   RGB, or luma only.
 - **Vectorscope** — Y′CbCr chroma in your choice of PQ (HDR, absolute-nits)
   or Rec.709 (SDR) encoding, with 75%/100% primary/secondary targets and a
-  skin-tone line *(pictured: a BT.2020 saturation sweep)*.
+  skin-tone line.
 - **CIE Chromaticity** — 1931 xy or 1976 u′v′, with the spectral locus,
   Rec.709 / P3 / Rec.2020 gamut triangles, and the D65 white point.
 
