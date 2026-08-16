@@ -86,7 +86,7 @@ need that.
 - **Layouts** — the `1 / 2 / 4` buttons switch layout presets; each panel has
   a scope picker.
 - **Navigate** — mouse-wheel zoom (to cursor), middle-drag pan, click the
-  bottom-left zoom readout to reset.
+  top-right zoom readout to reset.
 - **Reference lines** — add draggable horizontal nit markers on the waveform
   (log-scaled drag, `Shift` = finer).
 - **Quality** — presets from Low to Per-pixel trade bin-grid and sample
