@@ -22,6 +22,8 @@ struct Settings {
     int    fpsLimit = 0;              // 0 = unlimited
     bool   uiFollowSdrWhite = true;   // draw UI at the Windows SDR-white brightness
     bool   showTooltips = true;       // delayed hover tooltips on controls
+    float  controlsFadeOpacity = 0.05f; // floating controls' opacity while the cursor
+                                        // is outside the window (1 = never fade)
     bool   debugShowTestPattern = false; // expose the synthetic test source (debug)
     bool   useTestPattern = false;    // currently using the test source
 

@@ -63,6 +63,7 @@ startup).
 
 ## Releasing
 
-Bump `project(HDRScopes VERSION x.y.z)` in `CMakeLists.txt`, commit, then tag
-`vx.y.z` and push the tag — the `release` workflow builds, packages
-exe + shaders + licenses into a zip, and publishes a GitHub Release.
+Bump `project(HDRScopes VERSION x.y.z)` in `CMakeLists.txt`, add a
+`## vx.y.z` section to `CHANGELOG.md`, commit, then tag `vx.y.z` and push the
+tag — the `release` workflow builds, packages exe + shaders + licenses into a
+zip, and publishes a GitHub Release with that changelog section as its body.

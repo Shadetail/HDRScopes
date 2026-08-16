@@ -38,12 +38,23 @@
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
 // Scope-type picker (the four implemented scopes).
-static bool ScopeCombo(const char* id, ScopeType& st) {
-    static const ScopeType order[4] = { ScopeType::Waveform, ScopeType::Histogram, ScopeType::Vectorscope, ScopeType::CIE };
-    const char* names[4] = { "Waveform", "Histogram", "Vectorscope", "CIE Chromaticity" };
+static const ScopeType kScopeOrder[4] = { ScopeType::Waveform, ScopeType::Histogram, ScopeType::Vectorscope, ScopeType::CIE };
+static const char*     kScopeNames[4] = { "Waveform", "Histogram", "Vectorscope", "CIE Chromaticity" };
+
+// Width that fits the combo's current selection (preview text + arrow), so the
+// floating pickers only cover as much of the scope as they need. The open
+// popup still auto-sizes to the longest entry.
+static float ScopeComboWidth(ScopeType st) {
+    const char* name = kScopeNames[0];
+    for (int i = 0; i < 4; ++i) if (kScopeOrder[i] == st) name = kScopeNames[i];
+    return ImGui::CalcTextSize(name).x + ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetFrameHeight();
+}
+
+static bool ScopeCombo(const char* id, ScopeType& st, bool fitWidth = false) {
     int cur = 0;
-    for (int i = 0; i < 4; ++i) if (order[i] == st) cur = i;
-    if (ImGui::Combo(id, &cur, names, 4)) { st = order[cur]; return true; }
+    for (int i = 0; i < 4; ++i) if (kScopeOrder[i] == st) cur = i;
+    if (fitWidth) ImGui::SetNextItemWidth(ScopeComboWidth(st));
+    if (ImGui::Combo(id, &cur, kScopeNames, 4)) { st = kScopeOrder[cur]; return true; }
     return false;
 }
 
@@ -68,6 +79,7 @@ ULONGLONG     g_pickArmUntil = 0;
 float         g_uiScaleOverride = -1.0f;  // HDRSCOPES_UISCALE env (testing)
 float         g_pendingUiScale = -1.0f;   // from WM_DPICHANGED; applied between frames
 bool          g_controlsRescale = false;  // snap the controls popup to the new scale
+float         g_ctrlAlpha = 1.0f;         // floating-controls fade (1 = fully visible)
 }
 
 // Rebuild fonts and style for the given UI scale (window DPI / 96). The
@@ -318,6 +330,19 @@ static void DrawControlsWindow(float btnX, float btnY) {
     if (ImGui::CollapsingHeader("Preferences")) {
         ImGui::Checkbox("Show tooltips", &g_set.showTooltips);
         UiReset(g_set.showTooltips, UiDefaults().showTooltips);
+
+        float fadePct = g_set.controlsFadeOpacity * 100.0f;
+        ImGui::SetNextItemWidth(160 * u);
+        if (ImGui::SliderFloat("Idle controls opacity", &fadePct, 0.0f, 100.0f, "%.0f%%",
+                               ImGuiSliderFlags_AlwaysClamp))
+            // The range check rejects NaN from ctrl-click text entry, which
+            // would otherwise latch into the fade filter and the global alpha.
+            g_set.controlsFadeOpacity = (fadePct >= 0.0f && fadePct <= 100.0f)
+                                            ? fadePct / 100.0f : UiDefaults().controlsFadeOpacity;
+        UiReset(g_set.controlsFadeOpacity, UiDefaults().controlsFadeOpacity);
+        UiTip("How visible the floating controls (scope pickers, top-right buttons) "
+              "stay while the mouse is outside the HDRScopes window, so they don't "
+              "block the scopes when you're just watching. 100% = never fade.");
 
         if (ImGui::Button("Reset all settings to default")) {
             // Keep the window placement; reset everything else to defaults.
@@ -598,6 +623,19 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
             }
         }
 
+        // Fade the floating controls (scope pickers + top-right strip) when the
+        // cursor is outside the app window, so they stop covering the scopes
+        // while HDRScopes is just being watched. WindowFromPoint (not a rect
+        // test) so a foreign window overlapping ours still counts as outside.
+        {
+            POINT cur; GetCursorPos(&cur);
+            HWND under = WindowFromPoint(cur);
+            bool inside = under && GetAncestor(under, GA_ROOT) == g_hwnd;
+            float target = inside ? 1.0f : std::clamp(g_set.controlsFadeOpacity, 0.0f, 1.0f);
+            float dt = std::min(ImGui::GetIO().DeltaTime, 0.1f);
+            g_ctrlAlpha += (target - g_ctrlAlpha) * std::min(1.0f, dt * 10.0f);
+        }
+
         // ---- ImGui frame ----
         ImGui_ImplDX11_NewFrame(); ImGui_ImplWin32_NewFrame(); ImGui::NewFrame();
 
@@ -624,8 +662,15 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         for (int i = 0; i < count; ++i)
             dl->AddRect(r0[i], r1[i], IM_COL32(60, 60, 60, 255));
 
+        // Per-panel combos sit right of each scope's left label margin (30px
+        // for the waveform nit labels) so they never cover the numbers.
+        auto panelComboX = [&](int i) {
+            float ml = g_panels[i].Scope() ? g_panels[i].Scope()->GetMargins(g_set).l : 0.0f;
+            return (ml + 8.0f) * u;
+        };
+
         // Top-right strip geometry (the readout needs it to dodge the buttons).
-        const float comboW = 150.0f * u;
+        const float comboW = ScopeComboWidth(g_set.panelScope[0]);
         float stripY = area0.y + 11 * u;                                       // 5px down to clear the 10k line
         float stripX = area1.x - 240 * u - (count == 1 ? comboW + 8 * u : 0);  // 80px right, snug in the corner
 
@@ -633,7 +678,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         // in 2/4-up layouts and stays over the left scope).
         ImVec2 readoutR1 = (count == 1) ? area1 : ImVec2(area0.x + (area1.x - area0.x) * 0.5f, area1.y);
         // In multi-panel layouts panel 1 has a scope combo at its top-left.
-        const float avoidRightX = (count > 1) ? area0.x + (8 + 140) * u : -1.0f;
+        const float avoidRightX = (count > 1) ? area0.x + panelComboX(0) + comboW + 8 * u : -1.0f;
         DrawHoverReadout(probe, g_set, g_sdrWhiteNits, peakLRGB, peaksValid, area0, readoutR1,
                          stripX, avoidRightX);
 
@@ -649,11 +694,14 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         };
 
         // Top-right strip: (single layout) [scope combo] [Zoom] [1][2][4][Controls].
+        // The whole floating-controls layer fades while the cursor is outside
+        // the window (Preferences > Idle controls opacity).
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, g_ctrlAlpha);
         ImGui::SetCursorScreenPos(ImVec2(stripX, stripY));
         pushOpaqueWidgets();
         if (count == 1) {
-            ImGui::PushID(3000); ImGui::SetNextItemWidth(comboW);
-            ScopeCombo("##sc0", g_set.panelScope[0]); ImGui::PopID(); ImGui::SameLine();
+            ImGui::PushID(3000);
+            ScopeCombo("##sc0", g_set.panelScope[0], true); ImGui::PopID(); ImGui::SameLine();
         }
         char zlbl[32]; snprintf(zlbl, sizeof(zlbl), "Zoom %.2fx", g_set.zoom[0]);
         if (ImGui::Button(zlbl)) { for (int i = 0; i < 4; ++i) { g_set.zoom[i] = 1; g_set.panX[i] = g_set.panY[i] = 0; } }
@@ -669,13 +717,14 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         if (count > 1) {
             pushOpaqueWidgets();
             for (int i = 0; i < count; ++i) {
-                ImGui::SetCursorScreenPos(ImVec2(r0[i].x + 8 * u, r0[i].y + 6 * u));
-                ImGui::PushID(2000 + i); ImGui::SetNextItemWidth(140 * u);
-                ScopeCombo("##sc", g_set.panelScope[i]);
+                ImGui::SetCursorScreenPos(ImVec2(r0[i].x + panelComboX(i), r0[i].y + 6 * u));
+                ImGui::PushID(2000 + i);
+                ScopeCombo("##sc", g_set.panelScope[i], true);
                 ImGui::PopID();
             }
             ImGui::PopStyleColor(6);
         }
+        ImGui::PopStyleVar();  // floating-controls fade alpha
 
         // Bottom-right FPS.
         if (g_set.showFps) {

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(HDRScopes VERSION 1.0.2 LANGUAGES CXX)
+project(HDRScopes VERSION 1.0.3 LANGUAGES CXX)
 if(MSVC)
     enable_language(RC)
 endif()

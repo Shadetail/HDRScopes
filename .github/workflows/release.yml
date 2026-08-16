@@ -30,8 +30,21 @@ jobs:
           Copy-Item LICENSE, THIRD_PARTY_NOTICES.md $stage/
           Compress-Archive -Path $stage -DestinationPath "$stage.zip"
 
+      # Pull this tag's section out of CHANGELOG.md for the release body.
+      # Missing section -> empty body, so the release still publishes (with
+      # just the auto-generated changelog link appended below).
+      - name: Extract changelog
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v', ''
+          $md = Get-Content CHANGELOG.md -Raw
+          $m = [regex]::Match($md, "(?ms)^##\s+v?$([regex]::Escape($ver))\b[^\n]*\r?\n(.*?)(?=^##\s|\z)")
+          $body = if ($m.Success) { $m.Groups[1].Value.Trim() } else { "" }
+          Set-Content release_notes.md $body -Encoding utf8
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           files: "*.zip"
+          body_path: release_notes.md
           generate_release_notes: true

@@ -60,6 +60,7 @@ void Settings::Save() const {
     W(o, "fpsLimit", fpsLimit);
     W(o, "uiFollowSdrWhite", uiFollowSdrWhite);
     W(o, "showTooltips", showTooltips);
+    W(o, "controlsFadeOpacity", controlsFadeOpacity);
     W(o, "debugShowTestPattern", debugShowTestPattern);
     W(o, "useTestPattern", useTestPattern);
     W(o, "outputIndex", outputIndex);
@@ -150,6 +151,10 @@ void Settings::Load() {
     fpsLimit = kv.geti("fpsLimit", fpsLimit);
     uiFollowSdrWhite = kv.getb("uiFollowSdrWhite", uiFollowSdrWhite);
     showTooltips = kv.getb("showTooltips", showTooltips);
+    // Feeds the global ImGui alpha every frame, and a NaN would latch in the
+    // fade filter — so reject NaN/out-of-range instead of trusting the file.
+    float fade = kv.getf("controlsFadeOpacity", controlsFadeOpacity);
+    if (fade >= 0.0f && fade <= 1.0f) controlsFadeOpacity = fade;
     debugShowTestPattern = kv.getb("debugShowTestPattern", debugShowTestPattern);
     useTestPattern = kv.getb("useTestPattern", useTestPattern);
     outputIndex = kv.geti("outputIndex", outputIndex);
