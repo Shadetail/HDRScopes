@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(HDRScopes VERSION 1.0.3 LANGUAGES CXX)
+project(HDRScopes VERSION 1.0.4 LANGUAGES CXX)
 if(MSVC)
     enable_language(RC)
 endif()
@@ -49,7 +49,7 @@ add_executable(HDRScopes WIN32
 target_include_directories(HDRScopes PRIVATE src resources)
 target_link_libraries(HDRScopes PRIVATE
     imgui
-    d3d11 dxgi d3dcompiler dxguid msimg32 winmm
+    d3d11 dxgi d3dcompiler dxguid dwmapi msimg32 winmm
 )
 target_compile_definitions(HDRScopes PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 

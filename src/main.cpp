@@ -26,6 +26,7 @@
 #include "backends/imgui_impl_dx11.h"
 
 #include <d3d11.h>
+#include <dwmapi.h>
 #include <timeapi.h>
 #include <algorithm>
 
@@ -508,6 +509,12 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         L"HDRScopes " HS_WIDEN(HDRSCOPES_VERSION), WS_OVERLAPPEDWINDOW,
         wx, wy, ww, wh, nullptr, nullptr, hInst, nullptr);
     g_hwnd = hwnd;
+
+    // The app is dark-themed throughout, so force a dark title bar regardless
+    // of the OS light/dark setting (without this Windows paints it light when
+    // the window is unfocused — and a scopes app lives unfocused).
+    BOOL darkTitle = TRUE;
+    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkTitle, sizeof(darkTitle));
 
     if (!g_d3d.Init(hwnd)) { HDRLog("D3D init failed"); return 1; }
 

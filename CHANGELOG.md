@@ -4,6 +4,13 @@ User-facing changes per release. When a `vX.Y.Z` tag is pushed, the release
 workflow copies the matching `## vX.Y.Z` section into the GitHub Release body,
 so every release ships with a readable summary.
 
+## v1.0.4 — 2026-08-16
+
+- The title bar is now always dark to match the app's dark theme. Previously
+  it followed legacy Windows behavior and turned white whenever the window
+  lost focus — which is most of the time for a scopes app you watch while
+  working elsewhere.
+
 ## v1.0.3 — 2026-08-16
 
 - CIE: the spectral-locus horseshoe is drawn as a smooth spline through the
