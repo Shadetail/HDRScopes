@@ -1,7 +1,6 @@
-<img align="right" width="110" src="docs/img/icon.png" alt="HDRScopes icon">
-
 # HDRScopes
 
+<img align="right" width="110" src="docs/img/icon.png" alt="HDRScopes icon">
 **Real-time video scopes for the live Windows HDR signal.**
 Waveform · Histogram · Vectorscope · CIE Chromaticity — reading the actual
 scRGB FP16 pixels Windows composites to your display.
@@ -18,11 +17,13 @@ code, another grading app such as Unreal Engine or Lightroom / Adobe Camera
 Raw, or simply the desktop as a whole. If Windows draws it in HDR, HDRScopes
 can put it on a scope — live, at ~110 FPS for a 4K capture.
 
-<!-- HERO SHOT (Mario): full window, waveform on pretty HDR content with
-     specular peaks punching above a reference line. Save as docs/img/hero.png
-     and uncomment:
-<p align="center"><img src="docs/img/hero.png" alt="HDRScopes waveform of live HDR content"></p>
--->
+<p align="center">
+  <img src="docs/img/hero.png" alt="HDRScopes waveform of a live 4K HDR feed">
+  <br>
+  <sub><i>Colorized RGB waveform of a live 4K HDR feed on the 0–10,000-nit log
+  axis. Orange: a draggable 2,000-nit reference line. Circles: the hover probe
+  marking the pixel under the cursor.</i></sub>
+</p>
 
 ## Scopes
 
@@ -46,6 +47,14 @@ settings. Hover any pixel of the captured screen and each scope marks where
 that pixel lands (white = luminance, R/G/B circles), with a nit readout at the
 cursor.
 
+<p align="center">
+  <img src="docs/img/quad.png" alt="4-up layout: waveform, CIE chromaticity, histogram, and vectorscope">
+  <br>
+  <sub><i>The 4-up layout reading one live frame — waveform, CIE chromaticity,
+  histogram, and vectorscope, with the hover probe marking the same screen
+  pixel in every panel.</i></sub>
+</p>
+
 ## Download
 
 Grab the latest zip from **[Releases](https://github.com/Shadetail/HDRScopes/releases/latest)**,
@@ -66,7 +75,7 @@ need that.
 
 ## Usage
 
-<img align="right" width="300" src="docs/img/controls.png" alt="Controls popup">
+<img align="right" width="260" src="docs/img/controls.png" alt="Controls popup">
 
 - **Controls** (top-right button) opens the settings popup: capture source
   (monitor / window / dragged screen region), quality, and per-panel scope
