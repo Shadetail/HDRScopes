@@ -143,3 +143,17 @@ project, so support is best-effort. If HDRScopes is useful to you, a star
 helps others find it, and a donation via
 [Ko-fi](https://ko-fi.com/shadetaileagleshadow) or the Sponsor button up top
 is appreciated but never expected.
+
+---
+
+<p align="center">
+  <picture>
+    <source srcset="docs/img/cyberpunk.avif" type="image/avif">
+    <img src="docs/img/cyberpunk.jpg" alt="HDRScopes on a secondary display analyzing a Cyberpunk 2077 RenoDX HDR setup">
+  </picture>
+  <br>
+  <sub><i>Real-world use: HDRScopes on a secondary display, analyzing a
+  Cyberpunk 2077 RenoDX HDR setup. This screenshot is an HDR AVIF with gain
+  map — in a supporting browser on an HDR display, it displays in true
+  HDR.</i></sub>
+</p>
