@@ -78,11 +78,69 @@ float         g_sdrWhiteNits = 200.0f;    // captured monitor (scope math)
 float         g_uiSdrWhiteNits = 200.0f;  // window's monitor (UI brightness)
 ULONGLONG     g_lastSdrQuery = 0;
 HWND          g_pickedWindow = nullptr;
+DWORD         g_pickedWindowPid = 0;     // owner at pick time; detects HWND recycling
 ULONGLONG     g_pickArmUntil = 0;
 float         g_uiScaleOverride = -1.0f;  // HDRSCOPES_UISCALE env (testing)
 float         g_pendingUiScale = -1.0f;   // from WM_DPICHANGED; applied between frames
 bool          g_controlsRescale = false;  // snap the controls popup to the new scale
 float         g_ctrlAlpha = 1.0f;         // floating-controls fade (1 = fully visible)
+}
+
+// A stored HWND is not a permanent identity: after the target closes, Windows
+// can hand the same handle to an unrelated window, and IsWindow would pass.
+// Requiring the owning process to still match catches that recycling.
+static bool PickedWindowAlive() {
+    if (!g_pickedWindow || !IsWindow(g_pickedWindow)) return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(g_pickedWindow, &pid);
+    return pid == g_pickedWindowPid;
+}
+
+// Title of the window picked for Window-mode scoping, truncated for display.
+// Empty when there is no live picked window. GetWindowText on another
+// process's window reads the cached caption rather than messaging it, so
+// per-frame calls are cheap and can't block on a hung target.
+static std::wstring PickedWindowTitle() {
+    if (!PickedWindowAlive()) return L"";
+    wchar_t buf[128] = {};
+    int n = GetWindowTextW(g_pickedWindow, buf, 128);
+    if (n <= 0) return L"(untitled window)";
+    std::wstring t(buf, n);
+    if (t.size() > 60) { t.resize(60); t += L"..."; }
+    return t;
+}
+
+// True only when Window mode is actually cropping the captured output to the
+// picked window. A live window can still resolve to no captured pixels (for
+// example, when it is wholly on another monitor), in which case the main crop
+// path falls back to the full source.
+static bool PickedWindowCropActive() {
+    if (g_set.regionMode != 1 || !PickedWindowAlive() ||
+        (g_set.debugShowTestPattern && g_set.useTestPattern))
+        return false;
+    Region region;
+    region.mode = RegionMode::Window;
+    region.targetWindow = g_pickedWindow;
+    int x, y, w, h;
+    return region.ResolveToTexel(g_capture.DesktopRect(), g_capture.Width(), g_capture.Height(),
+                                 x, y, w, h);
+}
+
+// Suffix the native title bar with the scoped window so what's being monitored
+// stays visible without opening the controls. Skips the suffix when HDRScopes
+// itself is picked (it would feed back into the very title it reads).
+static void UpdateTitleBar() {
+    static std::wstring last;
+    std::wstring title = L"HDRScopes " HS_WIDEN(HDRSCOPES_VERSION);
+    if (PickedWindowCropActive() && g_pickedWindow != g_hwnd) {
+        std::wstring t = PickedWindowTitle();
+        // Em dash as an escape: this file is BOM-less UTF-8 and the build has
+        // no /utf-8 flag, so a literal one would be misdecoded in a wide
+        // string (narrow "—" literals elsewhere pass through as raw bytes,
+        // which wide literals don't).
+        if (!t.empty()) { title += L" \u2014 "; title += t; }
+    }
+    if (title != last) { last = title; SetWindowTextW(g_hwnd, title.c_str()); }
 }
 
 // Rebuild fonts and style for the given UI scale (window DPI / 96). The
@@ -214,7 +272,26 @@ static void DrawControlsWindow(float btnX, float btnY) {
             if (g_pickArmUntil) {
                 long long left = (long long)g_pickArmUntil - (long long)GetTickCount64();
                 if (left > 0) ImGui::Text("Hover target window... %lld ms", left);
-                else { POINT pt; GetCursorPos(&pt); HWND w = WindowFromPoint(pt); if (w) g_pickedWindow = GetAncestor(w, GA_ROOT); g_pickArmUntil = 0; }
+                else { POINT pt; GetCursorPos(&pt); HWND w = WindowFromPoint(pt); if (w) { g_pickedWindow = GetAncestor(w, GA_ROOT); GetWindowThreadProcessId(g_pickedWindow, &g_pickedWindowPid); } g_pickArmUntil = 0; }
+            }
+            // Confirm what the pick grabbed. Without a live target the region
+            // resolver falls back to the full monitor, so say that too.
+            std::wstring wt = PickedWindowTitle();
+            if (!wt.empty() && PickedWindowCropActive()) {
+                char u8[256];
+                WideCharToMultiByte(CP_UTF8, 0, wt.c_str(), -1, u8, sizeof(u8), nullptr, nullptr);
+                ImGui::TextWrapped("Scoping: %s", u8);
+            } else {
+                const char* fallback = "No window picked - scoping the full monitor";
+                if (g_pickedWindow && !PickedWindowAlive())
+                    fallback = "Picked window closed - scoping the full monitor";
+                else if (g_set.debugShowTestPattern && g_set.useTestPattern)
+                    fallback = "Test pattern active - scoping the full source";
+                else if (g_pickedWindow)
+                    fallback = "Picked window is off the captured monitor - scoping the full monitor";
+                ImGui::PushTextWrapPos(0.0f);
+                ImGui::TextDisabled("%s", fallback);
+                ImGui::PopTextWrapPos();
             }
         } else if (g_set.regionMode == 2) {
             ImGui::SetNextItemWidth(220 * u);
@@ -633,6 +710,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         float uiB = (g_d3d.IsHDR() && g_set.uiFollowSdrWhite) ? (g_uiSdrWhiteNits / 80.0f) : 1.0f;
         ImGui_ImplDX11_SetUIBrightness(uiB);
 
+        UpdateTitleBar();
+
         // ---- Source ----
         ID3D11ShaderResourceView* srcSRV = nullptr; UINT srcW = 0, srcH = 0; RECT outRect = {};
         bool usingTest = g_set.debugShowTestPattern && g_set.useTestPattern;
@@ -648,7 +727,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
 
         // ---- Region crop ----
         Region region; region.mode = (RegionMode)g_set.regionMode;
-        if (g_set.regionMode == 1) region.targetWindow = g_pickedWindow;
+        if (g_set.regionMode == 1) region.targetWindow = PickedWindowAlive() ? g_pickedWindow : nullptr;
         else if (g_set.regionMode == 2) region.desktopRect = { g_set.dragRect[0], g_set.dragRect[1], g_set.dragRect[0] + g_set.dragRect[2], g_set.dragRect[1] + g_set.dragRect[3] };
         int cx = 0, cy = 0, cw = (int)srcW, ch = (int)srcH;
         if (!(usingTest || g_set.regionMode == 0))

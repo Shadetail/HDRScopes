@@ -4,6 +4,20 @@ User-facing changes per release. When a `vX.Y.Z` tag is pushed, the release
 workflow copies the matching `## vX.Y.Z` section into the GitHub Release body,
 so every release ships with a readable summary.
 
+## v1.0.6 — 2026-08-17
+
+- Window mode now shows which window is actually being scoped (thanks to
+  DatTestBench for the request): the title bar appends the target window's
+  title while it is being scoped, and the Capture section shows a
+  "Scoping: ..." confirmation under the picker button. When nothing is
+  cropped — no window picked yet, the window closed, or it sits wholly off
+  the captured monitor — both readouts say so instead of naming a window
+  that isn't being scoped.
+- Fixed: after a scoped window closed, Windows could reuse its window handle
+  for an unrelated window, silently switching the scopes to that window. The
+  pick is now tied to the original window's process and lapses cleanly to
+  the full monitor instead.
+
 ## v1.0.5 — 2026-08-16
 
 - Update check: on startup the app now asks github.com whether a newer
