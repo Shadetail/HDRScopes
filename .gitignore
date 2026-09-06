@@ -17,3 +17,5 @@ CMakeFiles/
 /reference/
 # ImGui runtime layout (we use a code-defined layout)
 imgui.ini
+# Claude Code agent worktrees
+/.claude/worktrees/

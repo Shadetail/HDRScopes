@@ -70,3 +70,6 @@ Bump `project(HDRScopes VERSION x.y.z)` in `CMakeLists.txt`, add a
 `## vx.y.z` section to `CHANGELOG.md`, commit, then tag `vx.y.z` and push the
 tag — the `release` workflow builds, packages exe + shaders + licenses into a
 zip, and publishes a GitHub Release with that changelog section as its body.
+Before announcing, scan the zip on VirusTotal and link the report in the
+release notes. The exe carries a VERSIONINFO block (product name/version from
+the CMake project version); releases are not Authenticode-signed.
