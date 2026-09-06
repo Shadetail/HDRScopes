@@ -87,9 +87,10 @@ need that.
 <img align="right" width="260" src="docs/img/controls.png" alt="Controls popup">
 
 - **Controls** (top-right button) opens the settings popup: capture source
-  (monitor / window / dragged screen region), quality, and per-panel scope
-  options. Rest the mouse on any control for an explanation (tooltips can be
-  turned off under Preferences); right-click any control to reset just it.
+  (monitor / window / dragged screen region — the drag picker previews the
+  frozen screen in true HDR), quality, and per-panel scope options. Rest the
+  mouse on any control for an explanation (tooltips can be turned off under
+  Preferences); right-click any control to reset just it.
 - **Layouts** — the `1 / 2 / 4` buttons switch layout presets; each panel has
   a scope picker. Right-click `2` or `4` (or toggle Controls > Layout > "Stack
   panels vertically") to flip the multi-panel layouts between side-by-side and

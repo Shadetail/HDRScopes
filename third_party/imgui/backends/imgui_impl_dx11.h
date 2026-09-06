@@ -32,5 +32,6 @@ IMGUI_IMPL_API bool     ImGui_ImplDX11_CreateDeviceObjects();
 // [HDRScopes] Multiply all UI vertex colors by this (scRGB HDR brightness).
 // Set to SDRwhiteNits/80 so UI white matches Windows SDR content brightness.
 IMGUI_IMPL_API void     ImGui_ImplDX11_SetUIBrightness(float brightness);
+IMGUI_IMPL_API float    ImGui_ImplDX11_GetUIBrightness();
 
 #endif // #ifndef IMGUI_DISABLE

@@ -81,6 +81,7 @@ struct VERTEX_CONSTANT_BUFFER_DX11
 // pass tint = 1/brightness to cancel it out and keep its true nit values.
 static float g_HDRScopes_UIBrightness = 1.0f;
 void ImGui_ImplDX11_SetUIBrightness(float b) { g_HDRScopes_UIBrightness = b; }
+float ImGui_ImplDX11_GetUIBrightness() { return g_HDRScopes_UIBrightness; }
 
 // Backend data stored in io.BackendRendererUserData to allow support for multiple Dear ImGui contexts
 // It is STRONGLY preferred that you use docking branch with multi-viewports (== single Dear ImGui context + multiple windows) instead of multiple Dear ImGui contexts.

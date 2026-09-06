@@ -9,6 +9,7 @@
 #include "util/SdrWhite.h"
 #include "util/Format.h"
 #include "util/UiReset.h"
+#include "util/UiFonts.h"
 #include "util/UpdateCheck.h"
 #include "app/D3DContext.h"
 #include "capture/CaptureSource.h"
@@ -143,31 +144,12 @@ static void UpdateTitleBar() {
     if (title != last) { last = title; SetWindowTextW(g_hwnd, title.c_str()); }
 }
 
-// Rebuild fonts and style for the given UI scale (window DPI / 96). The
-// default 13px bitmap font stays for 1x (pixel-crisp); above that we load
-// Consolas (ships with Windows) at the scaled size. Never call mid-frame.
+// Rebuild fonts and style for the given UI scale (window DPI / 96). Fonts come
+// from the shared BuildUiFonts (the region picker uses it too). Never call
+// mid-frame.
 static void ApplyUiScale(float s) {
     UiScale() = s;
-    ImGuiIO& io = ImGui::GetIO();
-    io.Fonts->Clear();
-    io.FontGlobalScale = 1.0f;
-    bool ttf = false;
-    if (s > 1.001f) {
-        char path[MAX_PATH];
-        UINT n = GetWindowsDirectoryA(path, MAX_PATH);
-        if (n > 0 && n < MAX_PATH - 20) {
-            strcat_s(path, "\\Fonts\\consola.ttf");
-            if (GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES)
-                ttf = io.Fonts->AddFontFromFileTTF(path, (float)(int)(13.0f * s + 0.5f)) != nullptr;
-        }
-    }
-    if (!ttf) {
-        io.Fonts->AddFontDefault();
-        // The default atlas is always 13px, so scale it in either direction.
-        // This also makes the documented 0.5..1.0 test overrides scale the font
-        // together with the style and explicitly-sized widgets.
-        io.FontGlobalScale = s;
-    }
+    BuildUiFonts(ImGui::GetIO(), s);
     ImGui_ImplDX11_InvalidateDeviceObjects();  // font atlas re-uploads next frame
 
     // Fresh style then scale: ScaleAllSizes compounds, so never rescale in place.
@@ -257,9 +239,28 @@ static void DrawControlsWindow(float btnX, float btnY) {
         if (ImGui::Button("Select region on screen (drag)")) {
             RECT outRect = g_capture.DesktopRect();
             if (outRect.right <= outRect.left) outRect = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
-            ShowWindow(g_hwnd, SW_HIDE); Sleep(140);
+            ShowWindow(g_hwnd, SW_HIDE);
+            // The picker freezes the live capture, so wait for DWM to compose
+            // the desktop without our window: the first fresh frame after the
+            // hide can still predate it, the second cannot. Capped so a static
+            // desktop (no second update) doesn't stall.
+            const UINT64 serial0 = g_capture.FrameSerial();
+            const ULONGLONG t0 = GetTickCount64();
+            while (GetTickCount64() - t0 < 200 && g_capture.FrameSerial() < serial0 + 2) {
+                g_capture.AcquireFrame(8);
+                Sleep(4);
+            }
+            regionpicker::Source src;
+            src.device = g_d3d.Device();
+            src.appWindow = g_hwnd;
+            // Only a live capture's frame belongs to this output: after a
+            // failed retarget the previous output's texture is still held.
+            if (g_capture.HasFrame() && g_capture.IsLive()) src.srv = g_capture.SRV();
+            // The picker covers the captured monitor, so that monitor's SDR
+            // white sets its UI brightness (honouring the follow preference).
+            src.uiBrightness = (g_capture.IsHDR() && g_set.uiFollowSdrWhite) ? g_sdrWhiteNits / 80.0f : 1.0f;
             RECT picked;
-            bool got = regionpicker::PickScreenRegion(outRect, picked);
+            bool got = regionpicker::PickScreenRegion(src, outRect, picked);
             ShowWindow(g_hwnd, SW_SHOW); SetForegroundWindow(g_hwnd);
             if (got) {
                 g_set.dragRect[0] = picked.left; g_set.dragRect[1] = picked.top;

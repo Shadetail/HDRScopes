@@ -20,6 +20,11 @@ probe). `ScopeFactory` + `ScopePanel` host the 1/2/4-up layout.
   `settings.ini` next to the exe — local-first/portable — falling back to
   `%LOCALAPPDATA%\HDRScopes` when the exe's folder isn't writable; a pre-1.0.1
   file there still loads and migrates on first save.
+- `capture/RegionPicker` is the drag-to-select region picker: a topmost popup
+  over the captured output with its own scRGB FP16 swapchain and a second
+  ImGui context on the app's D3D11 device (no GDI). The frozen frame is a
+  copy of `CaptureSource`'s texture, so on HDR outputs it is shown at its
+  true nit values (8-bit SDR captures are viewed through an `_SRGB` SRV).
 - `util/SdrWhite` queries the Windows SDR-white level.
 - `util/UpdateCheck` is the startup update check: a background WinHTTP GET of
   `github.com/<repo>/releases/latest` with redirects disabled — the newest

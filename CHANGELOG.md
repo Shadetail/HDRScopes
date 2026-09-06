@@ -6,6 +6,16 @@ so every release ships with a readable summary.
 
 ## v1.0.7 — 2026-09-06
 
+- The "Select region on screen (drag)" picker now shows the frozen screen in
+  true HDR: it draws the app's own capture on an scRGB swapchain instead of
+  taking a GDI screenshot, which could only ever be SDR (and tone-mapped HDR
+  desktops into the bargain). Same gestures as before — drag to select,
+  release / Enter to confirm, Esc / right-click to cancel. Thanks to Kaldaien
+  (Special K / SKIV) for pointing out the GDI path and suggesting the
+  D3D11 route.
+- Fixed: switching the captured monitor between an HDR and an SDR output of
+  the same resolution left the scopes (and now the picker) showing the old
+  monitor's last frame until the capture was re-created.
 - The top readout can now also show the average luminance of the scoped
   region — the mean Rec.709 luminance of every pixel, in nits, i.e. the
   frame's overall light level (what SKIV's details panel calls Avg

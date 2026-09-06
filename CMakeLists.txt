@@ -50,7 +50,7 @@ add_executable(HDRScopes WIN32
 target_include_directories(HDRScopes PRIVATE src resources)
 target_link_libraries(HDRScopes PRIVATE
     imgui
-    d3d11 dxgi d3dcompiler dxguid dwmapi msimg32 winmm winhttp shell32
+    d3d11 dxgi d3dcompiler dxguid dwmapi winmm winhttp shell32
 )
 target_compile_definitions(HDRScopes PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 

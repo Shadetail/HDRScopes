@@ -166,7 +166,15 @@ void CaptureSource::ReleaseDuplicator() {
 }
 
 bool CaptureSource::EnsureTexture(UINT w, UINT h, DXGI_FORMAT fmt) {
-    if (tex_ && width_ == w && height_ == h && format_ == fmt) return true;
+    // Compare against the texture's own description, not format_: a retarget
+    // rewrites format_ from the new duplicator before the first frame arrives,
+    // so an HDR<->SDR switch between same-resolution outputs used to keep the
+    // old-format texture and every CopyResource into it silently failed.
+    if (tex_) {
+        D3D11_TEXTURE2D_DESC cur = {};
+        tex_->GetDesc(&cur);
+        if (cur.Width == w && cur.Height == h && cur.Format == fmt) return true;
+    }
     tex_.Reset();
     srv_.Reset();
 
@@ -231,6 +239,7 @@ bool CaptureSource::AcquireFrame(UINT timeoutMs) {
             if (EnsureTexture(sdesc.Width, sdesc.Height, sdesc.Format)) {
                 context_->CopyResource(tex_.Get(), srcTex.Get());
                 hasFrame_ = true;
+                ++frameSerial_;
             }
         }
     }

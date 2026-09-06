@@ -38,6 +38,12 @@ public:
     bool IsHDR() const { return isHDR_; }
     DXGI_FORMAT Format() const { return format_; }
     bool HasFrame() const { return hasFrame_; }
+    // A duplicator exists for the selected output. After a failed retarget the
+    // previous output's frame is still held (HasFrame stays true) but not live.
+    bool IsLive() const { return dup_ != nullptr; }
+    // Bumps each time a new desktop frame is copied (cursor-only updates don't
+    // count), so callers can tell a genuinely fresh frame from a reused one.
+    UINT64 FrameSerial() const { return frameSerial_; }
 
     // Enumerate outputs for the picker UI. Returns count; fills names/rects.
     struct OutputInfo { std::wstring name; RECT rect; bool hdr; int index; };
@@ -64,6 +70,7 @@ private:
     bool  isHDR_ = false;
     bool  hasFrame_ = false;
     bool  frameHeld_ = false;
+    UINT64 frameSerial_ = 0;
     int   curOutputIndex_ = 0;
     ULONGLONG lastDupAttemptMs_ = 0;
 };
