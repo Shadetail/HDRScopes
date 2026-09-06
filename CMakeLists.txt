@@ -55,7 +55,12 @@ target_link_libraries(HDRScopes PRIVATE
 target_compile_definitions(HDRScopes PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 
 # Dev fallback shader path (shipped builds load shaders/ next to the exe).
+# The HDRSCOPES_VER_* numerics feed the VERSIONINFO resource in HDRScopes.rc
+# (compile definitions reach rc.exe too).
 target_compile_definitions(HDRScopes PRIVATE
     HDRSCOPES_SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders"
     HDRSCOPES_VERSION="${PROJECT_VERSION}"
+    HDRSCOPES_VER_MAJOR=${PROJECT_VERSION_MAJOR}
+    HDRSCOPES_VER_MINOR=${PROJECT_VERSION_MINOR}
+    HDRSCOPES_VER_PATCH=${PROJECT_VERSION_PATCH}
 )

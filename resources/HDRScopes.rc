@@ -1,3 +1,33 @@
 #include "resource.h"
+#include <winres.h>
 
 IDI_APPICON ICON "HDRScopes.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION HDRSCOPES_VER_MAJOR,HDRSCOPES_VER_MINOR,HDRSCOPES_VER_PATCH,0
+ PRODUCTVERSION HDRSCOPES_VER_MAJOR,HDRSCOPES_VER_MINOR,HDRSCOPES_VER_PATCH,0
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Mario Kotlar"
+            VALUE "FileDescription", "HDRScopes - HDR video scopes"
+            VALUE "FileVersion", HDRSCOPES_VERSION
+            VALUE "InternalName", "HDRScopes"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Mario Kotlar. Licensed under GPLv3."
+            VALUE "OriginalFilename", "HDRScopes.exe"
+            VALUE "ProductName", "HDRScopes"
+            VALUE "ProductVersion", HDRSCOPES_VERSION
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
