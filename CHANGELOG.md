@@ -4,6 +4,17 @@ User-facing changes per release. When a `vX.Y.Z` tag is pushed, the release
 workflow copies the matching `## vX.Y.Z` section into the GitHub Release body,
 so every release ships with a readable summary.
 
+## v1.0.7 — 2026-09-06
+
+- Stacked layout for portrait monitors: Controls > Layout > "Stack panels
+  vertically" arranges the 2- and 4-panel layouts top-to-bottom instead of
+  left-to-right. 2 panels stack full-width; the 4-panel grid goes column-major
+  (panel 2 under panel 1, panels 3 and 4 in the right column), and the
+  automatic square/stretchy split from v1.0.3 now moves the horizontal
+  divider instead, so a row of vectorscope + CIE takes only the height its
+  graphs can use and the waveform/histogram row gets the rest. Right-clicking
+  the `2` or `4` layout button flips the option too.
+
 ## v1.0.6 — 2026-08-17
 
 - Window mode now shows which window is actually being scoped (thanks to

@@ -71,6 +71,7 @@ void Settings::Save() const {
     W(o, "regionMode", regionMode);
     for (int i = 0; i < 4; ++i) { char k[32]; snprintf(k, 32, "dragRect%d", i); W(o, k, dragRect[i]); }
     W(o, "layout", (int)layout);
+    W(o, "layoutStacked", layoutStacked);
     for (int i = 0; i < 4; ++i) { char k[32]; snprintf(k, 32, "panelScope%d", i); W(o, k, (int)panelScope[i]); }
     W(o, "qualityDownsample", qualityDownsample);
     W(o, "bilinearDownsample", bilinearDownsample);
@@ -167,6 +168,7 @@ void Settings::Load() {
     regionMode = kv.geti("regionMode", regionMode);
     for (int i = 0; i < 4; ++i) { char k[32]; snprintf(k, 32, "dragRect%d", i); dragRect[i] = kv.geti(k, dragRect[i]); }
     layout = (LayoutMode)kv.geti("layout", (int)layout);
+    layoutStacked = kv.getb("layoutStacked", layoutStacked);
     for (int i = 0; i < 4; ++i) { char k[32]; snprintf(k, 32, "panelScope%d", i); panelScope[i] = (ScopeType)kv.geti(k, (int)panelScope[i]); }
     // Continuous quality replaced the old Low..PerPixel enum; migrate roughly.
     if (kv.has("qualityDownsample")) qualityDownsample = kv.getf("qualityDownsample", qualityDownsample);

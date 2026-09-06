@@ -36,6 +36,7 @@ struct Settings {
 
     // ---- Layout ----
     LayoutMode layout = LayoutMode::Single;
+    bool       layoutStacked = false; // multi-panel layouts top/bottom instead of left/right
     ScopeType  panelScope[4] = { ScopeType::Waveform, ScopeType::CIE,
                                  ScopeType::Histogram, ScopeType::Vectorscope };
 

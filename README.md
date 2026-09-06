@@ -40,7 +40,8 @@ can put it on a scope — live, at ~110 FPS for a 4K capture.
   Rec.709 / P3 / Rec.2020 gamut triangles, and the D65 white point.
 
 Layouts: single scope, 2-up, or 4-up, each panel with its own scope choice and
-settings. Hover any pixel of the captured screen and each scope marks where
+settings; the multi-panel layouts can be stacked top-to-bottom for a portrait
+monitor. Hover any pixel of the captured screen and each scope marks where
 that pixel lands (white = luminance, R/G/B circles), with a nit readout at the
 cursor.
 
@@ -84,7 +85,10 @@ need that.
   options. Rest the mouse on any control for an explanation (tooltips can be
   turned off under Preferences); right-click any control to reset just it.
 - **Layouts** — the `1 / 2 / 4` buttons switch layout presets; each panel has
-  a scope picker.
+  a scope picker. Right-click `2` or `4` (or toggle Controls > Layout > "Stack
+  panels vertically") to flip the multi-panel layouts between side-by-side and
+  stacked top-to-bottom — for a portrait monitor; in the stacked 4-panel grid,
+  panel 2 goes under panel 1.
 - **Navigate** — mouse-wheel zoom (to cursor), middle-drag pan, click the
   top-right zoom readout to reset.
 - **Reference lines** — add draggable horizontal nit markers on the waveform

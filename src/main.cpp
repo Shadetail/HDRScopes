@@ -394,6 +394,15 @@ static void DrawControlsWindow(float btnX, float btnY) {
         UiReset(g_set.graticuleOpacity, UiDefaults().graticuleOpacity);
     }
 
+    if (ImGui::CollapsingHeader("Layout", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Checkbox("Stack panels vertically", &g_set.layoutStacked);
+        UiReset(g_set.layoutStacked, UiDefaults().layoutStacked);
+        UiTip("Arrange multi-panel layouts top-to-bottom instead of left-to-right - "
+              "for a portrait monitor or a tall, narrow window. 2 panels stack; the "
+              "4-panel grid keeps panel 2 under panel 1. Right-clicking the 2 / 4 "
+              "buttons top-right flips this too.");
+    }
+
     int count = (int)g_set.layout;
     for (int i = 0; i < count; ++i) {
         ImGui::PushID(1000 + i);
@@ -560,7 +569,8 @@ static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float s
     const float bw = std::max(total, line2[0] ? ImGui::CalcTextSize(line2).x : 0.0f);
     float y = a0.y + 11 * su;  // moved 5px down so it clears the 10k line
     // If the readout would run under the top-right button strip or (multi-panel
-    // layouts) panel 1's top-left scope combo, drop it a row instead of colliding.
+    // layouts) the readout panel's top-left scope combo, drop it a row instead
+    // of colliding.
     if ((avoidLeftX  > 0.0f && cx + bw * 0.5f + 8 * su > avoidLeftX) ||
         (avoidRightX > 0.0f && cx - bw * 0.5f - 8 * su < avoidRightX))
         y += ImGui::GetFrameHeight() + 6 * su;
@@ -593,22 +603,41 @@ static float IdealCellW(int i, float cellH, const Settings& s) {
     return (cellH - (m.t + m.b) * u) * aspect + (m.l + m.r) * u;
 }
 
-// Layout rects within the given content area. splitX: absolute x of the quad
-// layout's vertical split (<0 = centered).
-static void LayoutRects(ImVec2 p0, ImVec2 p1, int count, float splitX, ImVec2 out0[4], ImVec2 out1[4]) {
-    float w = p1.x - p0.x, h = p1.y - p0.y;
+// Transpose of IdealCellW for the stacked quad: the cell height panel i's
+// fixed-aspect scope can use at the given cell width.
+static float IdealCellH(int i, float cellW, const Settings& s) {
+    IScope* sc = g_panels[i].Scope();
+    float aspect = sc ? sc->AspectRatio() : 0.0f;
+    if (aspect <= 0.0f) return 0.0f;
+    Margins m = sc->GetMargins(s);
+    const float u = UiScale();
+    return (cellW - (m.l + m.r) * u) / aspect + (m.t + m.b) * u;
+}
+
+// Layout rects within the given content area. stacked transposes the
+// multi-panel layouts for portrait monitors: 2-up becomes top/bottom, and the
+// quad goes column-major (panel 2 under panel 1, panels 3/4 in the right
+// column — 1-based as in the UI; indices 0..3 elsewhere). split: absolute x
+// (y when stacked) of the quad's movable divider (<0 = centered).
+static void LayoutRects(ImVec2 p0, ImVec2 p1, int count, bool stacked, float split, ImVec2 out0[4], ImVec2 out1[4]) {
+    if (count == 1) { out0[0] = p0; out1[0] = p1; return; }
+    // Lay out with the divider on the x axis; for the stacked layouts that's
+    // the transposed area, so swap x/y on the way in and back out.
+    auto T = [stacked](ImVec2 v) { return stacked ? ImVec2(v.y, v.x) : v; };
+    ImVec2 a0 = T(p0), a1 = T(p1);
+    float w = a1.x - a0.x, h = a1.y - a0.y;
     const float pad = 2.0f;
-    if (count == 1) { out0[0] = p0; out1[0] = p1; }
-    else if (count == 2) {
-        out0[0] = p0; out1[0] = ImVec2(p0.x + w * 0.5f - pad, p1.y);
-        out0[1] = ImVec2(p0.x + w * 0.5f + pad, p0.y); out1[1] = p1;
+    if (count == 2) {
+        out0[0] = a0;                                   out1[0] = ImVec2(a0.x + w * 0.5f - pad, a1.y);
+        out0[1] = ImVec2(a0.x + w * 0.5f + pad, a0.y);  out1[1] = a1;
     } else {
-        float mx = (splitX > 0.0f) ? splitX : p0.x + w * 0.5f, my = p0.y + h * 0.5f;
-        out0[0] = p0;                          out1[0] = ImVec2(mx - pad, my - pad);
-        out0[1] = ImVec2(mx + pad, p0.y);      out1[1] = ImVec2(p1.x, my - pad);
-        out0[2] = ImVec2(p0.x, my + pad);      out1[2] = ImVec2(mx - pad, p1.y);
-        out0[3] = ImVec2(mx + pad, my + pad);  out1[3] = p1;
+        float mx = (split > 0.0f) ? split : a0.x + w * 0.5f, my = a0.y + h * 0.5f;
+        out0[0] = a0;                          out1[0] = ImVec2(mx - pad, my - pad);
+        out0[1] = ImVec2(mx + pad, a0.y);      out1[1] = ImVec2(a1.x, my - pad);
+        out0[2] = ImVec2(a0.x, my + pad);      out1[2] = ImVec2(mx - pad, a1.y);
+        out0[3] = ImVec2(mx + pad, my + pad);  out1[3] = a1;
     }
+    for (int i = 0; i < count; ++i) { out0[i] = T(out0[i]); out1[i] = T(out1[i]); }
 }
 
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
@@ -807,23 +836,30 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         // vertical split so the square column gets exactly the width its
         // graphs can use and the stretchy column takes the reclaimed space.
         // Never below 50% for the stretchy column (narrow windows stay 50/50).
-        float splitX = -1.0f;
+        // Stacked: the same transposed — panel indices {0,2} form the top row,
+        // {1,3} the bottom, and it's the horizontal divider that moves.
+        const bool stacked = g_set.layoutStacked;
+        float split = -1.0f;
         if (count == 4) {
             // Materialize any scope-type changes now so the split is computed
             // from the scopes actually drawn this frame (no one-frame lag).
             for (int i = 0; i < count; ++i) g_panels[i].EnsureScope(g_set.panelScope[i]);
             const float pad = 2.0f;  // matches LayoutRects
-            float cellH = (area1.y - scopeArea0.y) * 0.5f - pad;
-            auto colWidth = [&](int a, int b) {  // widest ideal width; 0 = has a stretchy panel
-                float wa = IdealCellW(a, cellH, g_set), wb = IdealCellW(b, cellH, g_set);
-                return (wa > 0.0f && wb > 0.0f) ? std::max(wa, wb) : 0.0f;
+            // Divider axis: x across columns, or y across stacked rows. cell
+            // is the cell's fixed extent on the other axis.
+            float lo = stacked ? scopeArea0.y : scopeArea0.x, hi = stacked ? area1.y : area1.x;
+            float cell = (stacked ? area1.x - scopeArea0.x : area1.y - scopeArea0.y) * 0.5f - pad;
+            auto ideal = [&](int i) { return stacked ? IdealCellH(i, cell, g_set) : IdealCellW(i, cell, g_set); };
+            auto pairIdeal = [&](int a, int b) {  // largest ideal extent; 0 = has a stretchy panel
+                float ia = ideal(a), ib = ideal(b);
+                return (ia > 0.0f && ib > 0.0f) ? std::max(ia, ib) : 0.0f;
             };
-            float li = colWidth(0, 2), ri = colWidth(1, 3);
-            float cx = (scopeArea0.x + area1.x) * 0.5f;
-            if (ri > 0.0f && li <= 0.0f)      splitX = std::max(cx, area1.x - pad - ri);
-            else if (li > 0.0f && ri <= 0.0f) splitX = std::min(cx, scopeArea0.x + pad + li);
+            float first = pairIdeal(0, 2), second = pairIdeal(1, 3);  // left/right, or top/bottom
+            float mid = (lo + hi) * 0.5f;
+            if (second > 0.0f && first <= 0.0f)      split = std::max(mid, hi - pad - second);
+            else if (first > 0.0f && second <= 0.0f) split = std::min(mid, lo + pad + first);
         }
-        ImVec2 r0[4], r1[4]; LayoutRects(scopeArea0, area1, count, splitX, r0, r1);
+        ImVec2 r0[4], r1[4]; LayoutRects(scopeArea0, area1, count, stacked, split, r0, r1);
         for (int i = 0; i < count; ++i)
             g_panels[i].Draw(i, r0[i], r1[i], input, g_set, g_sdrWhiteNits, probe, uiB);
 
@@ -844,10 +880,21 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         float stripY = area0.y + 11 * u;                                       // 5px down to clear the 10k line
         float stripX = area1.x - 240 * u - (count == 1 ? comboW + 8 * u : 0);  // 80px right, snug in the corner
 
-        // Hover readout: centered over the wider top panel (with an off-center
-        // quad split that's the stretchy scope, which has room to spare), so it
-        // clears the divider and the fixed-aspect graphs.
-        int rp = (count > 1 && r1[1].x - r0[1].x > r1[0].x - r0[0].x + 1.0f) ? 1 : 0;
+        // Hover readout: centered over the widest panel touching the top edge
+        // (with an off-center quad split that's the stretchy scope, which has
+        // room to spare), so it clears the divider and the fixed-aspect graphs.
+        // Candidates (indices): 0/1 side by side, 0 alone in stacked 2-up, 0/2
+        // in the stacked quad. A width tie goes to a stretchy scope over a
+        // fixed-aspect one — the stacked quad's top cells always tie, and a
+        // square's graph is exactly where the readout would land — else to the
+        // lower index.
+        auto stretchy = [&](int i) { IScope* sc = g_panels[i].Scope(); return !sc || sc->AspectRatio() <= 0.0f; };
+        int rp = 0;
+        for (int i = 1; i < count; ++i) {
+            if (r0[i].y >= r0[0].y + 1.0f) continue;  // only panels on the top edge
+            float dw = (r1[i].x - r0[i].x) - (r1[rp].x - r0[rp].x);
+            if (dw > 1.0f || (fabsf(dw) <= 1.0f && stretchy(i) && !stretchy(rp))) rp = i;
+        }
         ImVec2 readout0 = (count == 1) ? area0 : ImVec2(r0[rp].x, area0.y);
         ImVec2 readout1 = (count == 1) ? area1 : ImVec2(r1[rp].x, area1.y);
         // That panel's scope combo sits at its top-left; dodge it (and the strip).
@@ -880,9 +927,14 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         char zlbl[32]; snprintf(zlbl, sizeof(zlbl), "Zoom %.2fx", g_set.zoom[0]);
         if (ImGui::Button(zlbl)) { for (int i = 0; i < 4; ++i) { g_set.zoom[i] = 1; g_set.panX[i] = g_set.panY[i] = 0; } }
         ImGui::SameLine();
+        // Right-clicking 2 or 4 flips the stacked option (same as Controls > Layout).
         if (ImGui::Button("1")) g_set.layout = LayoutMode::Single; ImGui::SameLine();
-        if (ImGui::Button("2")) g_set.layout = LayoutMode::SideBySide; ImGui::SameLine();
-        if (ImGui::Button("4")) g_set.layout = LayoutMode::Quad; ImGui::SameLine();
+        if (ImGui::Button("2")) g_set.layout = LayoutMode::SideBySide;
+        if (UiResetClicked()) g_set.layoutStacked = !g_set.layoutStacked;
+        UiTip("Right-click to flip between side-by-side and stacked (applies to the 2- and 4-panel layouts)."); ImGui::SameLine();
+        if (ImGui::Button("4")) g_set.layout = LayoutMode::Quad;
+        if (UiResetClicked()) g_set.layoutStacked = !g_set.layoutStacked;
+        UiTip("Right-click to flip between side-by-side and stacked (applies to the 2- and 4-panel layouts)."); ImGui::SameLine();
         float ctrlBtnX = ImGui::GetCursorScreenPos().x;
         if (ImGui::Button("Controls")) g_showControls = !g_showControls;
         ImGui::PopStyleColor(6);
