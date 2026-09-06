@@ -6,30 +6,27 @@ so every release ships with a readable summary.
 
 ## v1.0.7 — 2026-09-06
 
-- The "Select region on screen (drag)" picker now shows the frozen screen in
-  true HDR: it draws the app's own capture on an scRGB swapchain instead of
-  taking a GDI screenshot, which could only ever be SDR (and tone-mapped HDR
-  desktops into the bargain). Same gestures as before — drag to select,
-  release / Enter to confirm, Esc / right-click to cancel. Thanks to Kaldaien
-  (Special K / SKIV) for pointing out the GDI path and suggesting the
-  D3D11 route.
-- Fixed: switching the captured monitor between an HDR and an SDR output of
-  the same resolution left the scopes (and now the picker) showing the old
-  monitor's last frame until the capture was re-created.
-- The top readout can now also show the average luminance of the scoped
-  region — the mean Rec.709 luminance of every pixel, in nits, i.e. the
-  frame's overall light level (what SKIV's details panel calls Avg
-  Luminance). Off by default; turn it on under Controls > Quality & display
-  > "Average luminance". It rides along in the same GPU pass as the existing
-  peak measurement, so it is essentially free.
+- Region picker in true HDR: "Select region on screen (drag)" now previews
+  the frozen screen from the app's own HDR capture instead of an SDR GDI
+  screenshot. Same gestures: drag to select, release / Enter confirms,
+  Esc / right-click cancels. Thanks to Kaldaien (Special K / SKIV) for
+  flagging the GDI path.
 - Stacked layout for portrait monitors: Controls > Layout > "Stack panels
-  vertically" arranges the 2- and 4-panel layouts top-to-bottom instead of
-  left-to-right. 2 panels stack full-width; the 4-panel grid goes column-major
-  (panel 2 under panel 1, panels 3 and 4 in the right column), and the
-  automatic square/stretchy split from v1.0.3 now moves the horizontal
-  divider instead, so a row of vectorscope + CIE takes only the height its
-  graphs can use and the waveform/histogram row gets the rest. Right-clicking
-  the `2` or `4` layout button flips the option too.
+  vertically" (or right-click the `2` / `4` layout button) arranges the 2- and
+  4-panel layouts top-to-bottom. In the 4-panel grid panel 2 goes under
+  panel 1, and the automatic square/stretchy split now moves the horizontal
+  divider instead of the vertical one.
+- Average luminance in the top readout: the mean luminance of every pixel in
+  the scoped region, in nits — the frame's overall light level. Off by
+  default; turn it on under Controls > Quality & display > "Average
+  luminance".
+- Fixed: switching the captured monitor between an HDR and an SDR output of
+  the same resolution kept showing the old monitor's last frame.
+- Fixed: for saturated wide-gamut colors the peak readout's L could read
+  higher than the same pixel's hovered L; all readouts now share one
+  luminance formula.
+- The exe now carries version metadata (file/product version, product name,
+  copyright).
 
 ## v1.0.6 — 2026-08-17
 
