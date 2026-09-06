@@ -55,6 +55,7 @@ struct Settings {
     bool   showHoverReadout = true;   // L/R/G/B nits at top-center (peaks when not hovering)
     bool   readoutBg = true;          // translucent black box behind the readout
     bool   showSdr8bit = true;        // also show 8-bit SDR values
+    bool   showAvgLuminance = false;  // also show the region's mean luminance (nits)
     bool   showCursorNits = true;     // nit value attached to the cursor (waveform/histogram)
 
     bool perPixelQuality() const { return qualityDownsample <= 1.0001f; }

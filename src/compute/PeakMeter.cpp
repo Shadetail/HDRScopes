@@ -5,6 +5,7 @@
 namespace {
 struct PCB { INT cropX, cropY, cropW, cropH; UINT srcW, srcH, p0, p1; };
 inline UINT DivUp(UINT a, UINT b) { return (a + b - 1) / b; }
+constexpr UINT kBufBytes = 32;  // 8 uints: { L, R, G, B, sumLo, sumHi, pad, pad }
 }
 
 bool PeakMeter::Init(ID3D11Device* device) {
@@ -18,21 +19,21 @@ bool PeakMeter::Init(ID3D11Device* device) {
     bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER; bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     if (FAILED(device_->CreateBuffer(&bd, nullptr, &cb_))) return false;
 
-    // 4 uints, raw UAV so the shader can InterlockedMax into it.
+    // Raw UAV so the shader can InterlockedMax/InterlockedAdd into it.
     bd = {};
-    bd.ByteWidth = 16; bd.Usage = D3D11_USAGE_DEFAULT;
+    bd.ByteWidth = kBufBytes; bd.Usage = D3D11_USAGE_DEFAULT;
     bd.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
     bd.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
     if (FAILED(device_->CreateBuffer(&bd, nullptr, &buf_))) return false;
     D3D11_UNORDERED_ACCESS_VIEW_DESC ud = {};
     ud.Format = DXGI_FORMAT_R32_TYPELESS;
     ud.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
-    ud.Buffer.NumElements = 4;
+    ud.Buffer.NumElements = kBufBytes / 4;
     ud.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
     if (FAILED(device_->CreateUnorderedAccessView(buf_.Get(), &ud, &uav_))) return false;
 
     bd = {};
-    bd.ByteWidth = 16; bd.Usage = D3D11_USAGE_STAGING;
+    bd.ByteWidth = kBufBytes; bd.Usage = D3D11_USAGE_STAGING;
     bd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
     for (auto& s : staging_)
         if (FAILED(device_->CreateBuffer(&bd, nullptr, &s))) return false;
@@ -40,9 +41,10 @@ bool PeakMeter::Init(ID3D11Device* device) {
 }
 
 bool PeakMeter::Measure(ID3D11ShaderResourceView* srv, UINT srcW, UINT srcH,
-                        int cropX, int cropY, int cropW, int cropH, float outLRGB[4]) {
+                        int cropX, int cropY, int cropW, int cropH,
+                        float outLRGB[4], float& outAvgLum) {
     if (!srv || !cs_ || cropW <= 0 || cropH <= 0) {
-        if (haveLast_) { memcpy(outLRGB, last_, sizeof(last_)); return true; }
+        if (haveLast_) { memcpy(outLRGB, last_, sizeof(last_)); outAvgLum = lastAvg_; return true; }
         return false;
     }
 
@@ -70,11 +72,13 @@ bool PeakMeter::Measure(ID3D11ShaderResourceView* srv, UINT srcW, UINT srcH,
     context_->CSSetShaderResources(0, 1, nSRV);
 
     // Copy this frame's result; read the one copied a frame ago (GPU is done
-    // with it, so this Map doesn't stall).
+    // with it, so this Map doesn't stall). Remember the pixel count that copy
+    // was summed over — the crop may change before it is read back.
     int writeIdx = writeIdx_;
     int readIdx = 1 - writeIdx_;
     context_->CopyResource(staging_[writeIdx].Get(), buf_.Get());
     pending_[writeIdx] = true;
+    pendingPx_[writeIdx] = (uint64_t)cropW * (uint64_t)cropH;
     writeIdx_ = readIdx;
 
     // DO_NOT_WAIT: in the rare case the GPU hasn't finished that copy yet, keep
@@ -84,11 +88,14 @@ bool PeakMeter::Measure(ID3D11ShaderResourceView* srv, UINT srcW, UINT srcH,
                                 D3D11_MAP_FLAG_DO_NOT_WAIT, &ms))) {
         const uint32_t* bits = (const uint32_t*)ms.pData;
         for (int i = 0; i < 4; ++i) memcpy(&last_[i], &bits[i], sizeof(float));
+        // Luminance sum: 64-bit fixed point with 16 fractional bits (see the shader).
+        const double sum = (double)(((uint64_t)bits[5] << 32) | bits[4]) / 65536.0;
+        lastAvg_ = (float)(sum / (double)pendingPx_[readIdx]);
         context_->Unmap(staging_[readIdx].Get(), 0);
         pending_[readIdx] = false;
         haveLast_ = true;
     }
-    if (haveLast_) { memcpy(outLRGB, last_, sizeof(last_)); return true; }
+    if (haveLast_) { memcpy(outLRGB, last_, sizeof(last_)); outAvgLum = lastAvg_; return true; }
     return false;
 }
 

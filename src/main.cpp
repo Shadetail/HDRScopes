@@ -378,6 +378,11 @@ static void DrawControlsWindow(float btnX, float btnY) {
             UiReset(g_set.readoutBg, UiDefaults().readoutBg);
             UiTip("Draw a translucent dark box behind the top readout so it stays "
                   "legible over bright scope content.");
+            ImGui::SameLine(); ImGui::Checkbox("Average luminance", &g_set.showAvgLuminance);
+            UiReset(g_set.showAvgLuminance, UiDefaults().showAvgLuminance);
+            UiTip("Also show the average luminance of the scoped region: the mean "
+                  "Rec.709 luminance of every pixel, in nits - the frame's overall "
+                  "light level (SKIV calls this Avg Luminance).");
         }
         ImGui::Checkbox("Nit value at cursor", &g_set.showCursorNits);
         UiReset(g_set.showCursorNits, UiDefaults().showCursorNits);
@@ -514,9 +519,11 @@ static void Sdr8(float scrgb, float sdrNorm, char* out, size_t n) {
 // pixel when the cursor is over the target region; otherwise falls back to the
 // per-channel PEAKS of the region (four independent maxima — the brightest
 // pixel in luminance is not necessarily the brightest in any one channel).
+// The optional average luminance is a region statistic, so it trails the first
+// line in both modes.
 static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float sdrNits,
-                             const float peakLRGB[4], bool peaksValid, ImVec2 a0, ImVec2 a1,
-                             float avoidLeftX, float avoidRightX) {
+                             const float peakLRGB[4], float avgLum, bool peaksValid,
+                             ImVec2 a0, ImVec2 a1, float avoidLeftX, float avoidRightX) {
     if (!s.showHoverReadout) return;
     const bool peaks = !probe.probeValid;
     if (peaks && !peaksValid) return;
@@ -537,12 +544,13 @@ static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float s
 
     // Channel letters get channel colors (blue brightened so it reads on black).
     const ImU32 white = IM_COL32(235, 235, 235, 240);
+    const ImU32 dim   = IM_COL32(180, 200, 235, 230);
     const ImU32 colR  = IM_COL32(255,  40,  40, 240);
     const ImU32 colG  = IM_COL32( 40, 220,  40, 240);
     const ImU32 colB  = IM_COL32(  0, 123, 255, 240);
 
     struct Seg { char txt[40]; ImU32 col; };
-    Seg segs[12]; int nseg = 0;
+    Seg segs[16]; int nseg = 0;
     auto add = [&](const char* t, ImU32 c) {
         snprintf(segs[nseg].txt, sizeof(segs[nseg].txt), "%s", t); segs[nseg].col = c; ++nseg;
     };
@@ -550,8 +558,13 @@ static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float s
     add("R ", colR);  add(vr, white); add("   ", white);
     add("G ", colG);  add(vg, white); add("   ", white);
     add("B ", colB);  add(vb, white); add(peaks ? "   peak nits" : "   nits", white);
+    if (s.showAvgLuminance && peaksValid) {
+        char va[32];
+        FormatNits(std::max(0.0f, avgLum) * 80.0, va, sizeof(va));
+        add("     avg ", dim); add(va, white);
+    }
 
-    float widths[12]; float total = 0;
+    float widths[16]; float total = 0;
     for (int i = 0; i < nseg; ++i) { widths[i] = ImGui::CalcTextSize(segs[i].txt).x; total += widths[i]; }
 
     char line2[160] = "";
@@ -587,7 +600,7 @@ static void DrawHoverReadout(const ScopeFrame& probe, const Settings& s, float s
     float x = cx - total * 0.5f;
     for (int i = 0; i < nseg; ++i) { dl->AddText(ImVec2(x, y), segs[i].col, segs[i].txt); x += widths[i]; }
     if (line2[0])
-        dl->AddText(ImVec2(cx - w2 * 0.5f, y + lineH + 2 * su), IM_COL32(180, 200, 235, 230), line2);
+        dl->AddText(ImVec2(cx - w2 * 0.5f, y + lineH + 2 * su), dim, line2);
 }
 
 // Quad-cell width that panel i's fixed-aspect scope (vectorscope/CIE) can
@@ -773,13 +786,15 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         input.cropX = cx; input.cropY = cy; input.cropW = cw; input.cropH = ch;
         input.sdrWhiteNits = g_sdrWhiteNits;
 
-        // ---- Region peaks (for the readout when the cursor is off-region) ----
-        // Reads the unblurred source, like the probe, so peaks reflect the true
+        // ---- Region peaks + average (for the readout) ----
+        // Peaks show when the cursor is off-region; the average is optional.
+        // Reads the unblurred source, like the probe, so they reflect the true
         // signal.
         float peakLRGB[4] = { 0, 0, 0, 0 };
+        float avgLum = 0.0f;
         bool peaksValid = false;
         if (g_set.showHoverReadout && srcSRV)
-            peaksValid = g_peaks.Measure(srcSRV, srcW, srcH, cx, cy, cw, ch, peakLRGB);
+            peaksValid = g_peaks.Measure(srcSRV, srcW, srcH, cx, cy, cw, ch, peakLRGB, avgLum);
 
         // ---- Hover probe (source pixel under cursor) ----
         ScopeFrame probe;
@@ -900,7 +915,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
         // That panel's scope combo sits at its top-left; dodge it (and the strip).
         const float avoidRightX = (count > 1)
             ? r0[rp].x + panelComboX(rp) + ScopeComboWidth(g_set.panelScope[rp]) + 8 * u : -1.0f;
-        DrawHoverReadout(probe, g_set, g_sdrWhiteNits, peakLRGB, peaksValid, readout0, readout1,
+        DrawHoverReadout(probe, g_set, g_sdrWhiteNits, peakLRGB, avgLum, peaksValid, readout0, readout1,
                          stripX, avoidRightX);
 
         // Opaque widget backgrounds for the floating top strips (so they read

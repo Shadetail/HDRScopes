@@ -6,6 +6,12 @@ so every release ships with a readable summary.
 
 ## v1.0.7 — 2026-09-06
 
+- The top readout can now also show the average luminance of the scoped
+  region — the mean Rec.709 luminance of every pixel, in nits, i.e. the
+  frame's overall light level (what SKIV's details panel calls Avg
+  Luminance). Off by default; turn it on under Controls > Quality & display
+  > "Average luminance". It rides along in the same GPU pass as the existing
+  peak measurement, so it is essentially free.
 - Stacked layout for portrait monitors: Controls > Layout > "Stack panels
   vertically" arranges the 2- and 4-panel layouts top-to-bottom instead of
   left-to-right. 2 panels stack full-width; the 4-panel grid goes column-major

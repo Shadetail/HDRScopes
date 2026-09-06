@@ -85,6 +85,7 @@ void Settings::Save() const {
     W(o, "showHoverReadout", showHoverReadout);
     W(o, "readoutBg", readoutBg);
     W(o, "showSdr8bit", showSdr8bit);
+    W(o, "showAvgLuminance", showAvgLuminance);
     W(o, "showCursorNits", showCursorNits);
     W(o, "waveMode", waveMode);
     for (int i = 0; i < 3; ++i) { char k[32]; snprintf(k, 32, "chan%d", i); W(o, k, channelEnabled[i]); }
@@ -189,6 +190,7 @@ void Settings::Load() {
     showHoverReadout = kv.getb("showHoverReadout", showHoverReadout);
     readoutBg = kv.getb("readoutBg", readoutBg);
     showSdr8bit = kv.getb("showSdr8bit", showSdr8bit);
+    showAvgLuminance = kv.getb("showAvgLuminance", showAvgLuminance);
     showCursorNits = kv.getb("showCursorNits", showCursorNits);
     waveMode = kv.geti("waveMode", waveMode);
     for (int i = 0; i < 3; ++i) { char k[32]; snprintf(k, 32, "chan%d", i); channelEnabled[i] = kv.getb(k, channelEnabled[i]); }

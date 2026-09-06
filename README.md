@@ -43,7 +43,13 @@ Layouts: single scope, 2-up, or 4-up, each panel with its own scope choice and
 settings; the multi-panel layouts can be stacked top-to-bottom for a portrait
 monitor. Hover any pixel of the captured screen and each scope marks where
 that pixel lands (white = luminance, R/G/B circles), with a nit readout at the
-cursor.
+cursor. The top-center readout lists that pixel's L/R/G/B nits, or the scoped
+region's peaks when nothing is hovered: L is the luminance of the brightest
+pixel, while R, G and B are four independent per-channel maxima (the largest
+of the three is the MaxCLL-style figure other tools report). It can also show
+the region's average luminance — the frame's overall light level, the mean
+luminance of every pixel in the region, in nits — via Controls > Quality &
+display > "Average luminance" (off by default).
 
 <p align="center">
   <img src="docs/img/quad.png" alt="4-up layout: waveform, CIE chromaticity, histogram, and vectorscope">
